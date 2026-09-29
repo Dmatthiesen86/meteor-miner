@@ -1,7 +1,7 @@
 // The simulation: player, meteors, rocks, bullets, towers and stage flow.
 import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, BOONS, BOON_EVERY, MISSIONS, MISSION_SLOTS, stageConfig, pickKind, bestOre, missionReward } from './config.js';
 import { G, save, emptyCargo, cargoCount, boon } from './state.js';
-import { input } from './input.js';
+import { input, resetPointers } from './input.js';
 import { sfx } from './audio.js';
 
 const GRAVITY = 900;
@@ -75,6 +75,7 @@ export function startStage() {
   input.deploy = false;
   input.jump = false;
   input.use = null;
+  resetPointers();          // a thumb held through the last stage's end must not carry over
   G.mode = 'playing';
   updateCamera();
 }

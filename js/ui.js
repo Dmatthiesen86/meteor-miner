@@ -1,7 +1,7 @@
 // DOM side of the game: HUD, tower button, and the menu / shop / pause / game-over panels.
 import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, ITEMS, ITEM_CARRY, MISSIONS, PRESTIGE_STAGE, itemPrice, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
 import { G, save, newProfile, cargoValue, saleValue, cargoCount, boon } from './state.js';
-import { input } from './input.js';
+import { input, resetPointers } from './input.js';
 import { startStage, towerInReach, fillMissions } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
 
@@ -27,6 +27,7 @@ function setText(id, text) {
 function panel(html) {
   overlay.innerHTML = `<div class="panel">${html}</div>`;
   overlay.hidden = false;
+  resetPointers();          // the panel now covers whatever the fingers were doing
   hud.hidden = true;
   towerBtn.hidden = true;
   itemsBar.hidden = true;

@@ -18,6 +18,7 @@ const STICK_RANGE = 36, STICK_DEAD = 0.18;
 const TAP_MS = 220, TAP_SLOP = 12;   // a touch this short and this still is a tap, not a drag
 const keys = new Set();
 let movePtr = null, aimPtr = null;
+let fingersDown = 0;   // from touch events, which report every finger on the glass
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -32,10 +33,25 @@ function keyMove() {
   return r - l;
 }
 
+/**
+ * Forget every finger the game thinks is down. A lift can go missing (it lands on a panel that
+ * opened under the finger, the browser takes the touch for a system gesture, the app is
+ * switched away), and a steering thumb that never "lifts" would leave the miner running.
+ */
+export function resetPointers() {
+  movePtr = null;
+  aimPtr = null;
+  input.stick = null;
+  input.aimHeld = false;
+  input.move = keyMove();
+}
+
 export function initInput(canvas, handlers) {
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
     handlers.unlock();
+    // This is the only finger on the glass, so any finger still on the books is a ghost.
+    if (e.pointerType === 'touch' && fingersDown === 0) resetPointers();
     const p = logical(e);
     if (p.y > GROUND_Y) {
       // A second finger on the strip while the first is steering: jump at once.
@@ -80,8 +96,22 @@ export function initInput(canvas, handlers) {
       if (e.pointerType !== 'mouse') input.aimPoint = null;
     }
   };
-  canvas.addEventListener('pointerup', release);
-  canvas.addEventListener('pointercancel', release);
+  // On window, not the canvas: the lift must count wherever it lands.
+  window.addEventListener('pointerup', release);
+  window.addEventListener('pointercancel', release);
+  canvas.addEventListener('lostpointercapture', e => {
+    if (e.pointerId === movePtr || e.pointerId === aimPtr) release(e);
+  });
+  // Touch events fire after the matching pointer event, so at pointerdown `fingersDown`
+  // still holds the count from before that finger landed.
+  const countFingers = e => {
+    fingersDown = e.touches.length;
+    if (fingersDown === 0) resetPointers();
+  };
+  for (const type of ['touchstart', 'touchend', 'touchcancel']) {
+    window.addEventListener(type, countFingers, { capture: true, passive: true });
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { keys.clear(); resetPointers(); } });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   window.addEventListener('keydown', e => {
@@ -103,6 +133,6 @@ export function initInput(canvas, handlers) {
   });
   window.addEventListener('blur', () => {
     keys.clear();
-    if (movePtr === null) input.move = 0;
+    resetPointers();
   });
 }
