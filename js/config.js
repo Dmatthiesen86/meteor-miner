@@ -61,6 +61,7 @@ export const SHOP = [
   { id: 'towerRepair', name: 'Tower repair',  desc: l => `Towers mend 1 health every ${REPAIR_SECONDS[Math.min(l, REPAIR_SECONDS.length - 1)]}s.`, max: 5, cost: l => Math.round(100 * Math.pow(1.6, l)), needs: 'towers' },
   { id: 'autoTarget', name: 'Auto-targeting', desc: 'Towers track and lead the nearest threat on their own.', max: 1, cost: () => 900, needs: 'towers', minStage: 6 },
   { id: 'rockets',    name: 'Rocket launcher', desc: 'Towers also fire exploding rockets. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(700 * Math.pow(1.6, l)), needs: 'towers', minStage: 8 },
+  { id: 'homing',     name: 'Homing rockets', desc: 'Rockets steer themselves onto the nearest target.', max: 1, cost: () => 1500, needs: 'rockets', minStage: 8 },
 ];
 
 // Seconds per point of tower repair at each level of the repair upgrade (index = level - 1).

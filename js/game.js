@@ -11,6 +11,8 @@ const MAX_PARTS = 350;
 const TOWER_SHIELD_RECHARGE = 12;   // seconds without a hit before a tower's shield refills
 const TOWER_TURN = 4;                // rad/s an auto-targeting tower can swing its barrel
 const ROCKET_SPEED = 380, ROCKET_INTERVAL = 3.2;
+const ROCKET_TURN = 5;               // rad/s a homing rocket can steer
+const HOMING_RANGE = 420;
 const UFO_R = 20, UFO_SHOT_SPEED = 230;
 const UFO_LINGER = 15;               // seconds after the shower before UFOs give up and leave
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
@@ -260,11 +262,33 @@ function fire(x, y, angle, dmg, color) {
   G.bullets.push({ x, y, vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED, dmg, color, dead: false });
 }
 
-function fireRocket(x, y, angle, stats) {
+function fireRocket(x, y, angle, stats, homing) {
   G.bullets.push({
     x, y, vx: Math.cos(angle) * ROCKET_SPEED, vy: Math.sin(angle) * ROCKET_SPEED,
-    dmg: stats.dmg, blast: stats.blast, color: '#ffb347', trail: 0, dead: false,
+    dmg: stats.dmg, blast: stats.blast, homing, color: '#ffb347', trail: 0, dead: false,
   });
+}
+
+// Swing a homing rocket toward the closest thing in the sky, keeping its speed.
+function steerRocket(b, dt) {
+  let best = null, bestD = HOMING_RANGE;
+  for (const list of [G.meteors, G.ufos]) {
+    for (const m of list) {
+      if (m.dead || m.leaving || m.y > GROUND_Y - 30) continue;
+      const d = Math.hypot(m.x - b.x, m.y - b.y);
+      if (d < bestD) { bestD = d; best = m; }
+    }
+  }
+  if (!best) return;
+  const lead = bestD / ROCKET_SPEED;
+  const want = Math.atan2(best.y + (best.vy || 0) * lead - b.y, best.x + best.vx * lead - b.x);
+  const now = Math.atan2(b.vy, b.vx);
+  let diff = want - now;
+  if (diff > Math.PI) diff -= Math.PI * 2;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  const a = now + clamp(diff, -ROCKET_TURN * dt, ROCKET_TURN * dt);
+  b.vx = Math.cos(a) * ROCKET_SPEED;
+  b.vy = Math.sin(a) * ROCKET_SPEED;
 }
 
 // A rocket going off: everything inside the blast takes the full damage.
@@ -466,7 +490,7 @@ export function update(dt) {
     }
     if (armed && up.rockets && t.rocketCd <= 0) {
       t.rocketCd = ROCKET_INTERVAL;
-      fireRocket(t.x + Math.cos(t.angle) * 20, TOWER_Y + Math.sin(t.angle) * 20, t.angle, rocketStats(up));
+      fireRocket(t.x + Math.cos(t.angle) * 20, TOWER_Y + Math.sin(t.angle) * 20, t.angle, rocketStats(up), !!up.homing);
       sfx.rocket();
     }
 
@@ -494,6 +518,7 @@ export function update(dt) {
     b.y += b.vy * dt;
     if (b.y < -40 || b.x < -40 || b.x > W + 40 || b.y > GROUND_Y) { b.dead = true; continue; }
     if (b.blast) {
+      if (b.homing) steerRocket(b, dt);
       b.trail -= dt;
       if (b.trail <= 0) {
         b.trail = 0.03;
