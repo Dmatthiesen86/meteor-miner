@@ -47,6 +47,7 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   ones split in two first.
 - Rocks vanish after ~16 s, so go get them. Anything still on the ground when the stage
   ends is swept up for you.
+- A shield soaks up one hit per level before you lose hearts, and recharges every stage.
 - Towers take 3 blasts (more with tower armor). A destroyed tower is gone; surviving towers come back next stage.
 - Dying loses the rocks from that stage only. Cash, gear and towers are kept.
 - Progress saves in the browser (per device).

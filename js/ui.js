@@ -184,7 +184,8 @@ export function toggleMute() {
 export function updateHUD() {
   if (hud.hidden || !G.player) return;
   const p = G.player, prof = G.profile;
-  setText('hearts', '♥'.repeat(Math.max(0, p.hp)) + `<span class="lost">${'♥'.repeat(Math.max(0, p.maxHp - p.hp))}</span>`);
+  setText('hearts', '♥'.repeat(Math.max(0, p.hp)) + `<span class="lost">${'♥'.repeat(Math.max(0, p.maxHp - p.hp))}</span>`
+    + (p.shield > 0 ? `<span class="shield">${'◆'.repeat(p.shield)}</span>` : ''));
   setText('stage', 'Stage ' + prof.stage);
   setText('money', money(prof.money));
   setText('cargo', `${cargoCount(G.haul)} rocks · ${money(cargoValue(G.haul))}`);

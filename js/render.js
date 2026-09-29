@@ -318,6 +318,16 @@ export function render(ctx, time) {
 
     for (const t of G.towers) drawTower(ctx, t);
     for (const r of G.rocks) drawRock(ctx, r);
+    if (G.mode !== 'dead' && p.shield > 0) {
+      const pulse = 0.5 + 0.2 * Math.sin(time * 4);
+      ctx.strokeStyle = `rgba(143, 233, 255, ${pulse})`;
+      ctx.fillStyle = 'rgba(143, 233, 255, .08)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(p.x, GROUND_Y - 19, 17, 25, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
     if (G.mode !== 'dead') {
       if (up.gun || G.towersLeft > 0 || G.towers.length) drawAimLine(ctx, p);
       drawPlayer(ctx, p, up);

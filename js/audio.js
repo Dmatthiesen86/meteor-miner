@@ -62,6 +62,7 @@ export const sfx = {
   impact: r => { noise(0.25 + r * 0.008, 0.35 + Math.min(0.3, r * 0.006), 900); tone(90, 0.25, { type: 'sine', vol: 0.3, to: 40 }); },
   pickup: v => tone(640 + Math.min(600, v * 40), 0.09, { type: 'sine', vol: 0.12, to: 1100 + Math.min(600, v * 40) }),
   hurt:   () => { tone(300, 0.3, { type: 'sawtooth', vol: 0.2, to: 70 }); noise(0.2, 0.2, 1500); },
+  shield: () => { tone(900, 0.25, { type: 'sine', vol: 0.18, to: 220 }); noise(0.12, 0.12, 3000); },
   buy:    () => { tone(660, 0.08, { type: 'triangle', vol: 0.15 }); tone(990, 0.12, { type: 'triangle', vol: 0.15, delay: 0.08 }); },
   sell:   () => { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.1, { type: 'triangle', vol: 0.13, delay: i * 0.06 })); },
   deny:   () => tone(160, 0.15, { type: 'square', vol: 0.1, to: 110 }),

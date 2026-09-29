@@ -27,7 +27,7 @@ export function startStage() {
   const p = G.profile, cfg = stageConfig(p.stage);
   G.cfg = cfg;
   G.worldW = cfg.worldW;
-  G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), inv: 0, walk: 0, face: 1 };
+  G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1 };
   G.meteors = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = [];
   G.towersLeft = p.up.towers;
   G.haul = emptyCargo();
@@ -135,6 +135,15 @@ function dropRocks(m, count, onGround) {
 function hurtPlayer() {
   const p = G.player;
   if (p.inv > 0 || G.mode !== 'playing') return;
+  if (p.shield > 0) {
+    p.shield--;
+    p.inv = 1;
+    G.shake = Math.max(G.shake, 8);
+    burst(p.x, GROUND_Y - 20, 16, 240, ['#8fe9ff', '#d9f8ff'], 4, 200);
+    floater(p.x, GROUND_Y - PLAYER_H - 14, p.shield ? 'Shield hit' : 'Shield down', '#8fe9ff');
+    sfx.shield();
+    return;
+  }
   p.hp--;
   p.inv = 1.4;
   G.shake = Math.max(G.shake, 14);

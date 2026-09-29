@@ -37,6 +37,7 @@ html, body {
 .spacer { flex: 1; }
 .hearts { color: var(--bad); font-size: 19px; letter-spacing: 1px; text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .hearts .lost { color: #4a4f6e; }
+.hearts .shield { color: #8fe9ff; font-size: 14px; margin-left: 4px; }
 .pill {
   background: rgba(14, 17, 34, .72); border: 1px solid var(--line); border-radius: 999px;
   padding: 3px 9px; font-weight: 600; font-size: 13px; white-space: nowrap;
