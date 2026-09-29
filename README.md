@@ -63,7 +63,14 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   holding the mouse button, takes manual control while held.
 - Tower insurance replaces destroyed towers for free at the end of the stage, one per level.
 - With tower repair, damaged towers mend 1 health every few seconds (the timer restarts when hit).
-- **UFOs** arrive on every 5th stage (one on stage 5, two on 10, three from 15). They hover over
+- **Bosses** arrive on every 10th stage, taking turns: the Mothership (fires spreads, drops
+  meteors, escapes 45 s after the shower) and the Titan meteor (falls slowly; costs 2 hearts if
+  it lands). Beating one and clearing the stage pays 1 star shard.
+- **Bonus picks**: after every 5th stage choose 1 of 3 bonuses. They stack and last until the
+  next expedition or new game.
+- **Planets** change every 10 stages, then repeat: Luna, Glacia (slippery), Cinder (faster
+  meteors, longer fires), Aether (low gravity), Dune (wind).
+- **UFOs** arrive on stages 5, 15, 25... (one on stage 5, two on 15, and so on up to six). They hover over
   you and fire at you and your towers. Shoot them down for crystals and gold; if you can't,
   they leave 15 s after the shower ends.
 - **Auto-targeting** (from stage 6) makes towers track and lead the nearest threat.

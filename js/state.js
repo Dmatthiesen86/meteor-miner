@@ -13,6 +13,8 @@ export function newProfile() {
     cargo: emptyCargo(),
     up: { gun: 0, damage: 0, rate: 0, gunAuto: 0, gunRockets: 0, shield: 0, towers: 0, towerDamage: 0, towerRate: 0, towerArmor: 0, towerShield: 0, towerRepair: 0, towerInsurance: 0, autoTarget: 0, rockets: 0, homing: 0, boots: 0, magnet: 0, armor: 0 },
     muted: false,
+    boons: {},               // bonus picks held this run: id -> how many
+    pendingBoon: null,       // the 3 ids on offer, until one is chosen
     // permanent: survive both "New game" and a new expedition
     shards: 0,
     expeditions: 0,
@@ -42,9 +44,12 @@ export function save() {
 export function cargoValue(cargo) {
   return ORE_KEYS.reduce((sum, k) => sum + cargo[k] * ORES[k].value, 0);
 }
-/** What the cargo sells for, including the Rich veins perk. */
+/** How many of a bonus pick the player holds. */
+export const boon = id => G.profile.boons[id] || 0;
+
+/** What the cargo sells for, including the Rich veins perk and Prospector picks. */
 export function saleValue(cargo) {
-  return Math.round(cargoValue(cargo) * (1 + 0.15 * G.profile.perks.value));
+  return Math.round(cargoValue(cargo) * (1 + 0.15 * G.profile.perks.value) * (1 + 0.2 * boon('prospector')));
 }
 export function cargoCount(cargo) {
   return ORE_KEYS.reduce((sum, k) => sum + cargo[k], 0);
@@ -64,7 +69,9 @@ export const G = {
   obstacles: [], meteors: [], ufos: [], shots: [], rocks: [], bullets: [], towers: [], parts: [], floaters: [],
   towersLeft: 0,
   haul: emptyCargo(),
-  stats: { destroyed: 0, landed: 0, ufos: 0 },
+  stats: { destroyed: 0, landed: 0, ufos: 0, boss: false },
+  boss: null,              // the boss in play, for the health bar
+  wind: 0,
   banner: null,
   patches: [],             // ice and fire left on the ground by special meteors
   time: 0,

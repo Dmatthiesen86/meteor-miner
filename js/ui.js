@@ -1,6 +1,6 @@
 // DOM side of the game: HUD, tower button, and the menu / shop / pause / game-over panels.
-import { ORES, ORE_KEYS, SHOP, PERKS, PRESTIGE_STAGE, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
-import { G, save, newProfile, cargoValue, saleValue, cargoCount } from './state.js';
+import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, PRESTIGE_STAGE, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
+import { G, save, newProfile, cargoValue, saleValue, cargoCount, boon } from './state.js';
 import { input } from './input.js';
 import { startStage, towerInReach } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
@@ -55,7 +55,7 @@ export function showMenu() {
       <b>Jump</b> - Jump button, or Space / W. Bigger maps have boulders to hop over.<br>
       <b>Aim</b> - touch the sky or move the mouse. Your blaster fires on its own.<br>
       <b>Towers</b> - aim, then tap the tower button (or T) to plant one. Stand on it and tap again to re-aim.<br>
-      <b>UFOs</b> show up every 5th stage and shoot back. Shoot them down for crystals.<br>
+      <b>UFOs</b> shoot back on stages 5, 15, 25... and a <b>boss</b> arrives every 10th stage.<br>
       <b>Red marks</b> on the ground show where a meteor will land and how wide the blast is.
     </div>
     ${G.hasSave ? `<button class="btn primary" id="continueBtn">Continue - Stage ${p.stage}</button>` : ''}
@@ -92,9 +92,38 @@ function cargoHtml(cargo) {
     </div>`).join('');
 }
 
+// After every 5th stage: pick 1 of 3 bonuses before the trading post opens.
+function showBoonPick(summary) {
+  G.mode = 'shop';
+  const p = G.profile;
+  const cards = p.pendingBoon.map(id => {
+    const b = BOONS.find(x => x.id === id), have = boon(id);
+    return `
+      <button class="boon-card" data-boon="${id}">
+        <span class="name">${b.name}${have ? `<span class="lvl">Have ${have}</span>` : ''}</span>
+        <span class="desc">${b.desc}</span>
+      </button>`;
+  }).join('');
+  panel(`
+    <h2>Pick a bonus</h2>
+    <p class="tag">Stage ${p.stage - 1} cleared. Choose one. Bonuses stack and last until your next expedition.</p>
+    ${cards}
+  `);
+  overlay.querySelectorAll('[data-boon]').forEach(btn => btn.addEventListener('click', () => {
+    unlock();
+    p.boons[btn.dataset.boon] = boon(btn.dataset.boon) + 1;
+    p.pendingBoon = null;
+    save();
+    sfx.buy();
+    showShop(summary);
+  }));
+}
+
 export function showShop(summary) {
+  if (G.profile.pendingBoon && G.profile.pendingBoon.length) return showBoonPick(summary);
   G.mode = 'shop';
   const p = G.profile, up = p.up;
+  const held = BOONS.filter(b => boon(b.id)).map(b => `${b.name}${boon(b.id) > 1 ? ' ×' + boon(b.id) : ''}`);
   const value = saleValue(p.cargo);
   const bonus = value - cargoValue(p.cargo);
   const next = stageConfig(p.stage);
@@ -131,6 +160,7 @@ export function showShop(summary) {
         <span>Meteors shot down</span><span>${summary.destroyed}</span>
         <span>Meteors landed</span><span>${summary.landed}</span>
         ${summary.ufos ? `<span>UFOs shot down</span><span>${summary.ufos}</span>` : ''}
+        ${summary.boss ? `<span>${summary.boss.name}</span><span>${summary.boss.beaten ? 'Defeated · +1 ★' : 'Got away'}</span>` : ''}
         ${summary.lost ? `<span>Towers destroyed</span><span>${summary.lost}${summary.replaced ? ` (${summary.replaced} replaced by insurance)` : ''}</span>` : ''}
       </div>` : ''}
     <div class="wallet"><span>Cash</span><span class="cash">${money(p.money)}</span></div>
@@ -139,9 +169,12 @@ export function showShop(summary) {
         ? `${cargoHtml(p.cargo)}${bonus ? `<div class="cargo-line"><span>Rich veins bonus</span><span class="v">+${money(bonus)}</span></div>` : ''}<button class="btn good" id="sellBtn">Sell rocks for ${money(value)}</button>`
         : '<p style="margin:0">No rocks to sell.</p>'}
     </div>
+    ${held.length ? `<p class="tag boons-held"><b>Bonuses:</b> ${held.join(', ')}</p>` : ''}
     ${items}
     <button class="btn primary" id="goBtn">Start stage ${p.stage}</button>
-    <p class="tag" style="margin:8px 0 0;font-size:12.5px">Map width ${next.worldW} · shower lasts ${next.duration}s${next.obstacles ? ` · ${next.obstacles} boulder${next.obstacles > 1 ? 's' : ''} to jump` : ''}</p>
+    <p class="tag" style="margin:8px 0 0;font-size:12.5px">${next.planet.name} · Map width ${next.worldW} · shower lasts ${next.duration}s${next.obstacles ? ` · ${next.obstacles} boulder${next.obstacles > 1 ? 's' : ''} to jump` : ''}</p>
+    ${next.newPlanet ? `<p class="tag planet-warn">New planet: ${next.planet.name}. ${next.planet.tip}</p>` : ''}
+    ${next.boss ? `<p class="tag ufo-warn">Boss stage: ${next.boss.name}. ${next.boss.tip}</p>` : ''}
     ${next.newThreat ? `<p class="tag threat-warn">New threat: ${next.newThreat.name}. ${next.newThreat.tip}</p>` : ''}
     ${next.ufos ? `<p class="tag ufo-warn">UFO sighted! ${next.ufos > 1 ? next.ufos + ' saucers' : 'A saucer'} will shoot back this stage.</p>` : ''}
     ${p.shards > 0 || p.expeditions > 0 ? `<button class="btn shard" id="perksBtn">Star perks · ${p.shards} shard${p.shards === 1 ? '' : 's'}</button>` : ''}
@@ -273,7 +306,7 @@ export function updateHUD() {
   setText('hearts', (p.maxHp > 5 ? `♥<span class="num"> ${Math.max(0, p.hp)}/${p.maxHp}</span>`
     : '♥'.repeat(Math.max(0, p.hp)) + `<span class="lost">${'♥'.repeat(Math.max(0, p.maxHp - p.hp))}</span>`)
     + (p.shield > 0 ? `<span class="shield">◆<span class="num">${p.shield}</span></span>` : ''));
-  setText('stage', 'Stage ' + prof.stage);
+  setText('stage', `Stage ${prof.stage} · ${G.cfg.planet.name}`);
   setText('money', short(prof.money));
   setText('cargo', `${cargoCount(G.haul)} · ${short(saleValue(G.haul))}`);
   setText('muteBtn', '♪');

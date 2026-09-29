@@ -1,6 +1,6 @@
 // The simulation: player, meteors, rocks, bullets, towers and stage flow.
-import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, stageConfig, pickKind, bestOre } from './config.js';
-import { G, save, emptyCargo } from './state.js';
+import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, BOONS, BOON_EVERY, stageConfig, pickKind, bestOre } from './config.js';
+import { G, save, emptyCargo, boon } from './state.js';
 import { input } from './input.js';
 import { sfx } from './audio.js';
 
@@ -20,6 +20,9 @@ const GUN_TURN = 8;                  // rad/s the auto-targeting blaster swings
 const MAX_METEORS = 90;              // spawning pauses above this, to keep phones smooth
 const IRON_BULLET_FACTOR = 0.25;     // share of bullet damage an armored meteor takes
 const ICE_LIFE = 7, FIRE_LIFE = 5;
+const BOSS_R = 48, BOSS_LINGER = 45;  // mothership hit size; seconds after the shower before it escapes
+const TITAN_R = 95;
+const TWIN_SPREAD = 0.11;            // radians between Twin shot bullets
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -30,13 +33,14 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const blastRadius = r => r * 1.5 + 14;
-const power = () => 1 + 0.1 * G.profile.perks.power;          // Hot rounds perk
-export const gunStats = up => ({ dmg: (1 + up.damage) * power(), interval: 0.3 / (1 + 0.2 * up.rate) });
-export const towerStats = up => ({ dmg: (1 + up.towerDamage) * power(), interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor, shield: up.towerShield });
+const power = () => (1 + 0.1 * G.profile.perks.power) * (1 + 0.25 * boon('heavy'));   // Hot rounds perk, Heavy rounds picks
+const haste = () => 1 + 0.15 * boon('rapid');
+export const gunStats = up => ({ dmg: (1 + up.damage) * power(), interval: 0.3 / (1 + 0.2 * up.rate) / haste() });
+export const towerStats = up => ({ dmg: (1 + up.towerDamage) * power(), interval: 0.55 / (1 + 0.2 * up.towerRate) / haste(), hp: 3 + up.towerArmor + 2 * boon('plating'), shield: up.towerShield });
 export const rocketStats = up => ({ dmg: (2 + up.rockets) * (1 + up.towerDamage) * power(), blast: 40 + 9 * up.rockets });
 export const gunRocketStats = up => ({ dmg: (2 + up.gunRockets) * (1 + up.damage) * power(), blast: 40 + 9 * up.gunRockets });
-export const magnetRadius = up => 34 + 20 * up.magnet;
-export const maxHearts = up => 3 + up.armor;
+export const magnetRadius = up => 34 + 20 * up.magnet + 40 * boon('pull');
+export const maxHearts = up => 3 + up.armor + boon('heart');
 
 export function startStage() {
   const p = G.profile, cfg = stageConfig(p.stage);
@@ -48,10 +52,14 @@ export function startStage() {
   G.towersLeft = p.up.towers;
   G.towersStart = p.up.towers;
   G.haul = emptyCargo();
-  G.stats = { destroyed: 0, landed: 0, ufos: 0 };
+  G.stats = { destroyed: 0, landed: 0, ufos: 0, boss: false };
   G.ufosToSpawn = cfg.ufos;
   G.nextUfoT = cfg.duration * 0.25;
-  G.banner = cfg.newThreat ? { text: 'NEW: ' + cfg.newThreat.name.toUpperCase(), life: 4, color: '#ffd166' }
+  G.bossPending = !!cfg.boss;
+  G.boss = null;
+  G.wind = 0;
+  G.banner = cfg.newPlanet ? { text: 'WELCOME TO ' + cfg.planet.name.toUpperCase(), life: 4, color: '#8fe9ff' }
+    : cfg.newThreat ? { text: 'NEW: ' + cfg.newThreat.name.toUpperCase(), life: 4, color: '#ffd166' }
     : cfg.obstacles && cfg.n <= 4 ? { text: 'JUMP THE BOULDERS', life: 3.5, color: '#ffd166' } : null;
   G.time = 0;
   G.spawnT = 1.2;
@@ -124,6 +132,51 @@ function makeMeteor(x, y, vx, vy, r, ore, kind = 'normal') {
   };
 }
 
+// The 3 bonus picks offered after a stage: random, and only ones the player can still use.
+function offerBoons(p) {
+  const pool = BOONS.filter(b => (!b.max || (p.boons[b.id] || 0) < b.max) && (!b.needs || p.up[b.needs]));
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, 3).map(b => b.id);
+}
+
+function spawnBoss() {
+  const cfg = G.cfg, W = G.worldW, p = G.player;
+  if (cfg.boss.id === 'mothership') {
+    G.boss = {
+      boss: true, name: cfg.boss.name, r: BOSS_R,
+      x: Math.random() < 0.5 ? -80 : W + 80, y: 60, vx: 0, homeY: 125, speed: 70,
+      hp: cfg.bossHp, maxHp: cfg.bossHp, cd: 3, bombT: 6, phase: rand(0, 6),
+      flash: 0, leaving: false, dead: false,
+    };
+    G.ufos.push(G.boss);
+  } else {
+    // Timed to reach the ground just before the shower ends.
+    const y = -TITAN_R - 10, vy = (GROUND_Y - y) / (cfg.duration * 0.75);
+    const m = makeMeteor(clamp(p.x + rand(-160, 160), TITAN_R, W - TITAN_R), y, 0, vy, TITAN_R, bestOre(cfg.n), 'titan');
+    m.hp = m.maxHp = Math.round(cfg.bossHp * 1.6);
+    m.spin = 0.15;
+    m.name = cfg.boss.name;
+    G.boss = m;
+    G.meteors.push(m);
+  }
+  G.banner = { text: 'BOSS: ' + cfg.boss.name.toUpperCase(), life: 3.5, color: '#ff6b5e' };
+  sfx.alarm();
+}
+
+function bossDown(x, y) {
+  G.stats.boss = true;
+  G.shake = Math.max(G.shake, 18);
+  sfx.impact(60);
+  sfx.clear();
+  burst(x, y, 50, 380, ['#ff7ad9', '#8fe9ff', '#ffe9a8', '#ff6b3c'], 6, 300);
+  G.parts.push({ ring: true, x, y: y + 30, r: 130, life: 0.6, max: 0.6 });
+  G.banner = { text: 'BOSS DOWN  +1 STAR SHARD', life: 3.5, color: '#c58bff' };
+  for (let i = 0; i < 18; i++) dropRocks({ x, y, r: 60, vy: 0, ore: bestOre(G.cfg.n), kind: 'golden' }, 1, false);
+}
+
 function spawnMeteor() {
   if (G.meteors.length >= MAX_METEORS) return;
   const c = G.cfg, W = G.worldW;
@@ -180,7 +233,7 @@ function dropRocks(m, count, onGround) {
       y: onGround ? GROUND_Y - 6 : m.y + rand(-m.r, m.r) * 0.5,
       vx: rand(-1, 1) * (onGround ? 60 + m.r * 3 : 50),
       vy: onGround ? rand(-320, -140) : m.vy * 0.4 + rand(-120, 20),
-      ore, life: 16, spin: rand(0, 6), resting: false,
+      ore, life: 16 + 8 * boon('fuse'), spin: rand(0, 6), resting: false,
     });
   }
 }
@@ -223,14 +276,22 @@ function impact(m) {
   burst(m.x, y, 10 + Math.floor(m.r * 0.6), 160 + m.r * 5, ['#ffb347', '#ff6b3c', '#ffe9a8'], 5, 300, true);
   burst(m.x, y, 8 + Math.floor(m.r * 0.4), 120 + m.r * 3, ['#5b4636', '#7a6150'], 5, 900, true);
   G.parts.push({ ring: true, x: m.x, y: GROUND_Y, r: blast, life: 0.35, max: 0.35 });
-  if (m.kind === 'golden') floater(m.x, GROUND_Y - 30, 'Jackpot lost', '#ffd166');
+  if (m.kind === 'titan') G.banner = { text: 'THE TITAN LANDED', life: 3, color: '#ff6b5e' };
+  else if (m.kind === 'golden') floater(m.x, GROUND_Y - 30, 'Jackpot lost', '#ffd166');
   else dropRocks(m, Math.max(1, Math.round(m.r / 9)) * (m.kind === 'iron' ? 2 : 1), true);
   if (m.kind === 'ice') G.patches.push({ kind: 'ice', x: m.x, r: blast, life: ICE_LIFE, max: ICE_LIFE });
-  if (m.kind === 'fire') G.patches.push({ kind: 'fire', x: m.x, r: blast * 0.8, life: FIRE_LIFE, max: FIRE_LIFE });
+  if (m.kind === 'fire') {
+    const life = FIRE_LIFE * G.cfg.planet.fireMul;
+    G.patches.push({ kind: 'fire', x: m.x, r: blast * 0.8, life, max: life });
+  }
 
-  if (Math.abs(G.player.x - m.x) < blast + 8) hurtPlayer();
+  const hits = m.kind === 'titan' ? 2 : 1;                 // a landed titan costs double
+  const reach = (blast + 8) * Math.max(0.4, 1 - 0.12 * boon('dampers'));
+  if (Math.abs(G.player.x - m.x) < reach) {
+    for (let i = 0; i < hits; i++) { hurtPlayer(); if (i < hits - 1) G.player.inv = 0; }
+  }
   for (const t of G.towers) {
-    if (Math.abs(t.x - m.x) < blast * 0.8) damageTower(t);
+    if (Math.abs(t.x - m.x) < blast * 0.8) for (let i = 0; i < hits && !t.dead; i++) damageTower(t);
   }
 }
 
@@ -259,7 +320,12 @@ function shatter(m) {
   sfx.shatter(m.r);
   burst(m.x, m.y, 8 + Math.floor(m.r * 0.5), 140 + m.r * 3, ['#7a6150', '#5b4636', ORES[m.ore].color], 4, 500);
   const pay = m.kind === 'iron' ? 2 : 1;
-  if (m.kind === 'golden') {
+  if (m.kind === 'titan') {
+    bossDown(m.x, m.y);
+    for (let i = 0; i < 6; i++) {
+      G.meteors.push(makeMeteor(m.x + rand(-60, 60), m.y + rand(-40, 40), rand(-130, 130), rand(60, 120), rand(20, 30), m.ore));
+    }
+  } else if (m.kind === 'golden') {
     G.shake = Math.max(G.shake, 8);
     floater(m.x, m.y - 20, 'JACKPOT!', '#ffd166');
     for (let i = 0; i < 10; i++) dropRocks({ ...m, r: 30 }, 1, false);
@@ -300,6 +366,7 @@ function damageUfo(u, dmg, bx, by) {
   burst(bx, by, 3, 140, ['#ff7ad9', '#ffe9a8'], 3, 300);
   if (u.hp > 0) { sfx.hit(); return; }
   u.dead = true;
+  if (u.boss) { bossDown(u.x, u.y); return; }
   G.stats.ufos++;
   G.shake = Math.max(G.shake, 12);
   sfx.impact(30);
@@ -312,7 +379,7 @@ function damageUfo(u, dmg, bx, by) {
 }
 
 function fire(x, y, angle, dmg, color) {
-  G.bullets.push({ x, y, vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED, dmg, color, dead: false });
+  G.bullets.push({ x, y, vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED, dmg, color, pierce: boon('pierce'), hits: null, dead: false });
 }
 
 function fireRocket(x, y, angle, stats, homing) {
@@ -356,7 +423,7 @@ function explode(b) {
     if (!m.dead && Math.hypot(m.x - b.x, m.y - b.y) < b.blast + m.r) damageMeteor(m, b.dmg, m.x, m.y);
   }
   for (const u of G.ufos) {
-    if (!u.dead && Math.hypot(u.x - b.x, u.y - b.y) < b.blast + UFO_R) damageUfo(u, b.dmg, u.x, u.y);
+    if (!u.dead && Math.hypot(u.x - b.x, u.y - b.y) < b.blast + (u.r || UFO_R)) damageUfo(u, b.dmg, u.x, u.y);
   }
 }
 
@@ -429,7 +496,13 @@ function finishStage() {
   const lost = G.towersStart - survived;
   const replaced = Math.min(lost, p.up.towerInsurance);
   p.up.towers = survived + replaced;
-  const summary = { stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos, hp: G.player.hp, lost, replaced };
+  const bossBeaten = G.stats.boss;
+  if (bossBeaten) p.shards++;                         // paid on clearing, so dying can't farm it
+  if (p.stage % BOON_EVERY === 0) p.pendingBoon = offerBoons(p);
+  const summary = {
+    stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos,
+    hp: G.player.hp, lost, replaced, boss: G.cfg.boss ? { name: G.cfg.boss.name, beaten: bossBeaten } : null,
+  };
   p.stage++;
   p.best = Math.max(p.best, p.stage);
   G.hasSave = true;
@@ -447,9 +520,10 @@ export function update(dt) {
   G.shake = Math.max(0, G.shake - dt * 40);
 
   // player
-  const speed = 170 + 26 * up.boots;
+  const planet = cfg.planet;
+  const speed = (170 + 26 * up.boots) * (1 + 0.12 * boon('feet'));
   const onIce = p.jy === 0 && G.patches.some(q => q.kind === 'ice' && Math.abs(p.x - q.x) < q.r);
-  p.vx += (input.move * speed - p.vx) * Math.min(1, dt * (onIce ? 1.6 : 14));
+  p.vx += (input.move * speed - p.vx) * Math.min(1, dt * (onIce ? 1.6 : planet.grip));
   const fromX = p.x;
   p.x = clamp(p.x + p.vx * dt, 10, W - 10);
 
@@ -459,7 +533,7 @@ export function update(dt) {
   }
   if (p.vjump !== 0 || p.jy > 0) {
     p.jy += p.vjump * dt;
-    p.vjump -= JUMP_GRAVITY * dt;
+    p.vjump -= JUMP_GRAVITY * planet.gravity * dt;
     if (p.jy <= 0) { p.jy = 0; p.vjump = 0; }
   }
   // boulders block the way unless the miner is above them
@@ -506,6 +580,17 @@ export function update(dt) {
     }
   }
 
+  if (planet.wind) {
+    G.wind = Math.sin(G.time * 0.35) * planet.wind;
+    if (Math.random() < dt * 14) {
+      particle(G.view.camX + rand(0, G.view.w), rand(60, GROUND_Y - 10), G.wind * 5, rand(-8, 8), 0.7, 'rgba(255, 233, 168, .5)', 2.5);
+    }
+  }
+  if (G.bossPending && !clearing && G.time >= cfg.duration * 0.2) {
+    G.bossPending = false;
+    spawnBoss();
+  }
+
   // UFOs arrive part-way through the shower, hover over the player and shoot back
   if (!clearing && G.ufosToSpawn > 0 && G.time >= G.nextUfoT) {
     G.ufosToSpawn--;
@@ -514,10 +599,13 @@ export function update(dt) {
   }
   for (const u of G.ufos) {
     u.flash = Math.max(0, u.flash - dt);
-    if (G.time > cfg.duration + UFO_LINGER) u.leaving = true;
+    if (G.time > cfg.duration + (u.boss ? BOSS_LINGER : UFO_LINGER) && !u.leaving) {
+      u.leaving = true;
+      if (u.boss) G.banner = { text: 'THE MOTHERSHIP ESCAPED', life: 3, color: '#ff6b5e' };
+    }
     if (u.leaving) {
       u.y -= 170 * dt;
-      if (u.y < -60) u.dead = true;
+      if (u.y < -80) u.dead = true;
       continue;
     }
     u.y += (u.homeY + Math.sin(G.time * 2 + u.phase) * 6 - u.y) * Math.min(1, dt * 1.5);
@@ -526,11 +614,19 @@ export function update(dt) {
     u.x += u.vx * dt;
     u.cd -= dt;
     if (u.cd <= 0 && u.x > 0 && u.x < W && !clearing) {
-      u.cd = rand(1.5, 2.4);
+      u.cd = u.boss ? rand(1.3, 1.9) : rand(1.5, 2.4);
       const t = G.towers.length && Math.random() < 0.35 ? G.towers[Math.floor(Math.random() * G.towers.length)] : null;
       const a = Math.atan2((t ? TOWER_Y : GROUND_Y - 18) - (u.y + 10), (t ? t.x : p.x) - u.x);
-      G.shots.push({ x: u.x, y: u.y + 10, vx: Math.cos(a) * UFO_SHOT_SPEED, vy: Math.sin(a) * UFO_SHOT_SPEED, dead: false });
+      for (const off of u.boss ? [-0.22, 0, 0.22] : [0]) {
+        G.shots.push({ x: u.x, y: u.y + 10, vx: Math.cos(a + off) * UFO_SHOT_SPEED, vy: Math.sin(a + off) * UFO_SHOT_SPEED, dead: false });
+      }
       sfx.ufoShot();
+    }
+    if (u.boss && !clearing && u.x > 0 && u.x < W && (u.bombT -= dt) <= 0) {
+      u.bombT = 5;
+      for (const dir of [-1, 1]) {
+        G.meteors.push(makeMeteor(clamp(u.x + dir * 40, 30, W - 30), u.y + 20, dir * rand(20, 70), cfg.speedMin, rand(15, 22), pickOre(cfg.oreWeights)));
+      }
     }
   }
   for (const s of G.shots) {
@@ -556,7 +652,11 @@ export function update(dt) {
       if (G.gunT <= 0) {
         const g = gunStats(up);
         G.gunT = g.interval;
-        fire(p.x + Math.cos(G.aim) * 16, gunY + Math.sin(G.aim) * 16, G.aim, g.dmg, '#ffe9a8');
+        const shots = 1 + boon('twin');
+        for (let i = 0; i < shots; i++) {
+          const a = G.aim + (i - (shots - 1) / 2) * TWIN_SPREAD;
+          fire(p.x + Math.cos(a) * 16, gunY + Math.sin(a) * 16, a, g.dmg, '#ffe9a8');
+        }
         sfx.shoot();
       }
       if (up.gunRockets) {
@@ -626,22 +726,24 @@ export function update(dt) {
     }
     let hit = null, isUfo = false;
     for (const m of G.meteors) {
-      if (m.dead) continue;
+      if (m.dead || (b.hits && b.hits.includes(m))) continue;
       const dx = m.x - b.x, dy = m.y - b.y, rr = m.r + 3;
       if (dx * dx + dy * dy < rr * rr) { hit = m; break; }
     }
     if (!hit) {
       for (const u of G.ufos) {
-        if (u.dead) continue;
-        const dx = (u.x - b.x) / 1.5, dy = u.y - b.y;          // saucers are wider than tall
-        if (dx * dx + dy * dy < UFO_R * UFO_R) { hit = u; isUfo = true; break; }
+        if (u.dead || (b.hits && b.hits.includes(u))) continue;
+        const dx = (u.x - b.x) / 1.5, dy = u.y - b.y, rr = u.r || UFO_R;   // saucers are wider than tall
+        if (dx * dx + dy * dy < rr * rr) { hit = u; isUfo = true; break; }
       }
     }
     if (hit) {
-      b.dead = true;
-      if (b.blast) explode(b);
-      else if (isUfo) damageUfo(hit, b.dmg, b.x, b.y);
+      if (b.blast) { b.dead = true; explode(b); continue; }
+      if (isUfo) damageUfo(hit, b.dmg, b.x, b.y);
       else damageMeteor(hit, hit.kind === 'iron' ? b.dmg * IRON_BULLET_FACTOR : b.dmg, b.x, b.y);
+      // Piercing rounds carry on, but never hit the same target twice.
+      if (b.pierce > 0) { b.pierce--; (b.hits ||= []).push(hit); }
+      else b.dead = true;
     }
   }
 
@@ -661,6 +763,7 @@ export function update(dt) {
       const landX = m.x + m.vx * (GROUND_Y - m.y) / m.vy;
       m.vx = clamp(m.vx + Math.sign(p.x - landX) * 70 * dt, -110, 110);
     }
+    if (planet.wind && m.kind !== 'titan') m.vx = clamp(m.vx + G.wind * dt, -170, 170);
     if (m.kind === 'cluster' && m.y > m.burstY) { scatter(m); continue; }
 
     m.trail -= dt;
@@ -668,7 +771,7 @@ export function update(dt) {
       m.trail = 0.045;
       const colors = METEOR_STYLE[m.kind].trail;
       particle(m.x + rand(-m.r, m.r) * 0.5, m.y - m.r * 0.6, -m.vx * 0.2 + rand(-15, 15), -m.vy * 0.25,
-        rand(0.25, 0.5), colors[Math.random() < 0.5 ? 0 : 1], m.r * rand(0.25, 0.5));
+        rand(0.25, 0.5), colors[Math.random() < 0.5 ? 0 : 1], Math.min(16, m.r * rand(0.25, 0.5)));
     }
 
     if (m.y + m.r * 0.8 >= GROUND_Y) { impact(m); continue; }
@@ -735,6 +838,7 @@ export function update(dt) {
   G.floaters = G.floaters.filter(f => f.life > 0);
 
   // stage flow: once the shower ends, the leftover rocks fly in and the shop opens
+  if (G.boss && G.boss.dead) G.boss = null;
   if (G.mode === 'playing' && G.time >= cfg.duration && G.meteors.length === 0 && G.ufos.length === 0 && G.ufosToSpawn === 0) {
     G.mode = 'clearing';
     G.clearT = 0;

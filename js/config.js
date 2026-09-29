@@ -36,6 +36,7 @@ export const METEOR_STYLE = {
   fire:    { body: '#a8402c', glow: '255, 70, 30',   trail: ['#ff4f2a', '#ffb347'] },
   iron:    { body: '#70788a', glow: '200, 210, 230', trail: ['#c9d2f2', '#9aa3ad'] },
   homing:  { body: '#8a2f6b', glow: '255, 80, 200',  trail: ['#ff7ad9', '#ffd6f3'] },
+  titan:   { body: '#4a3a5a', glow: '255, 60, 60',   trail: ['#ff4f2a', '#ffb347'] },
 };
 export const METEOR_KINDS = {
   cluster: { from: 3,  name: 'Cluster meteors', tip: 'They burst into a swarm on the way down.' },
@@ -55,6 +56,31 @@ export function pickKind(cfg) {
   return cfg.kinds[Math.floor(Math.random() * cfg.kinds.length)];
 }
 
+// Every 10th stage has a boss instead of UFOs. They take turns.
+export const BOSSES = [
+  { id: 'mothership', name: 'Mothership',   tip: 'A huge saucer. It fires spreads of bolts and drops meteors.' },
+  { id: 'titan',      name: 'Titan meteor', tip: 'One giant rock, falling slowly. Break it before it lands.' },
+];
+
+// A new planet every 10 stages, each with its own look and one rule change.
+//   grip: how fast the miner reaches full speed (lower = slides)   gravity: jump gravity multiplier
+//   speedMul / spawnMul: meteor fall speed and how many fall        fireMul: how long fire burns
+//   wind: sideways push on falling meteors
+const PLANET_DEFAULTS = { grip: 14, gravity: 1, speedMul: 1, spawnMul: 1, fireMul: 1, wind: 0 };
+export const PLANETS = [
+  { name: 'Luna',   tip: 'Home ground. No surprises.',
+    sky: ['#070816', '#1a1838', '#43284f'], ridge: ['#2a2144', '#211a36'], ground: ['#2b2238', '#6a5a7a', '#3a2f4a', '#3d3250'], disc: '#9db8e8' },
+  { name: 'Glacia', tip: 'Frozen ground: you slide before you stop.',
+    sky: ['#04121f', '#0f3350', '#3f7a99'], ridge: ['#1c4a66', '#14384f'], ground: ['#1d3a4d', '#bfe9ff', '#2c566e', '#35627c'], disc: '#d9f8ff', grip: 4.5 },
+  { name: 'Cinder', tip: 'Meteors fall 15% faster and fires burn twice as long.',
+    sky: ['#160404', '#3d0f0a', '#8a3014'], ridge: ['#4a1a10', '#33110b'], ground: ['#2b1410', '#ff7a3c', '#4a2018', '#5a2a1e'], disc: '#ff9d3c', speedMul: 1.15, fireMul: 2 },
+  { name: 'Aether', tip: 'Low gravity: you jump higher, and showers are slower but thicker.',
+    sky: ['#0a0620', '#2a1458', '#1f6f7a'], ridge: ['#2b2260', '#1d1848'], ground: ['#1f1b45', '#7fe0d0', '#2d2860', '#383272'], disc: '#c58bff', gravity: 0.55, speedMul: 0.8, spawnMul: 1.3 },
+  { name: 'Dune',   tip: 'Strong wind pushes meteors sideways. Watch the red marks drift.',
+    sky: ['#1a0f05', '#5a3512', '#c9853a'], ridge: ['#6b4520', '#523416'], ground: ['#3d2a14', '#e0b060', '#574020', '#65502c'], disc: '#ffe9a8', wind: 55 },
+].map(p => ({ ...PLANET_DEFAULTS, ...p }));
+export const planetFor = n => PLANETS[Math.floor((n - 1) / 10) % PLANETS.length];
+
 // Growth is fast over the first ~20 stages, then keeps creeping up so stage 60 is still
 // harder than stage 40.
 export function stageConfig(n) {
@@ -62,22 +88,27 @@ export function stageConfig(n) {
   const worldW = n <= 18 ? 360 + 120 * (n - 1) : Math.min(2400 + 40 * (n - 18), 4000);
   const hpMul = 1 + 0.3 * (n - 1) + 0.01 * late * late;
   const newKind = Object.keys(METEOR_KINDS).find(k => METEOR_KINDS[k].from === n);
+  const planet = planetFor(n);
   return {
     n,
     worldW,
     duration: 35 + 5 * Math.min(n, 10),
     // Wider maps get more meteors so the sky above the player stays about as busy.
-    interval: (n <= 15 ? 1.15 - 0.05 * n : Math.max(0.28, 0.4 - 0.003 * (n - 15))) / Math.pow(worldW / 360, 0.8),
-    speedMin: Math.min(80 + 8 * n, 260) + Math.min(80, late * 1.5),
-    speedMax: Math.min(150 + 14 * n, 420) + Math.min(100, late * 2),
+    interval: (n <= 15 ? 1.15 - 0.05 * n : Math.max(0.28, 0.4 - 0.003 * (n - 15))) / Math.pow(worldW / 360, 0.8) / planet.spawnMul,
+    speedMin: (Math.min(80 + 8 * n, 260) + Math.min(80, late * 1.5)) * planet.speedMul,
+    speedMax: (Math.min(150 + 14 * n, 420) + Math.min(100, late * 2)) * planet.speedMul,
+    planet,
+    newPlanet: n > 1 && (n - 1) % 10 === 0,
     minR: 9,
     maxR: Math.min(23 + 5 * n, 72) + Math.min(23, Math.max(0, n - 10) * 0.4),
     hpMul,
     // Boulders the miner has to jump; none on the first small maps.
     obstacles: Math.max(0, Math.floor((worldW - 360) / 240)),
-    // Every 5th stage UFOs join the shower and shoot back.
-    ufos: n % 5 !== 0 ? 0 : n <= 15 ? n / 5 : Math.min(6, 3 + Math.floor((n - 15) / 15)),
+    // Stages 5, 15, 25... bring UFOs that shoot back; stages 10, 20, 30... bring a boss.
+    ufos: n % 10 === 5 ? Math.min(6, 1 + Math.floor(n / 10)) : 0,
     ufoHp: Math.round(30 * hpMul),
+    boss: n % 10 === 0 ? BOSSES[(n / 10 - 1) % BOSSES.length] : null,
+    bossHp: Math.round(250 * hpMul),
     kinds: Object.keys(METEOR_KINDS).filter(k => METEOR_KINDS[k].from <= n),
     newThreat: newKind ? METEOR_KINDS[newKind] : n === GOLDEN.from ? GOLDEN : null,
     oreWeights: Object.fromEntries(ORE_KEYS.map(k => [k, oreWeight(ORES[k], n)])),
@@ -123,6 +154,24 @@ export function priceOf(item, level) {
 
 // Seconds per point of tower repair at each level of the repair upgrade (index = level - 1).
 export const REPAIR_SECONDS = [18, 15, 12, 9, 6];
+
+// ---------- bonus picks ----------
+// After every BOON_EVERY-th stage the player picks 1 of 3. They stack, and last until the
+// next expedition or new game. `max` caps how many of one can be held; `needs` is shop gear.
+export const BOON_EVERY = 5;
+export const BOONS = [
+  { id: 'rapid',      name: 'Rapid fire',      desc: 'Blaster and towers fire 15% faster.' },
+  { id: 'heavy',      name: 'Heavy rounds',    desc: '+25% damage for everything you fire.' },
+  { id: 'twin',       name: 'Twin shot',       desc: 'Blaster fires 1 more bullet per shot.',  max: 4, needs: 'gun' },
+  { id: 'pierce',     name: 'Piercing rounds', desc: 'Bullets punch through 1 more meteor.',   max: 3 },
+  { id: 'feet',       name: 'Fleet feet',      desc: 'Run 12% faster.',                        max: 4 },
+  { id: 'pull',       name: 'Big magnet',      desc: 'Pull rocks in from 40 further away.',    max: 5 },
+  { id: 'prospector', name: 'Prospector',      desc: '+20% cash for rocks sold.' },
+  { id: 'heart',      name: 'Extra heart',     desc: '+1 heart.' },
+  { id: 'plating',    name: 'Thick plating',   desc: 'Every tower gets +2 health.',            needs: 'towers' },
+  { id: 'fuse',       name: 'Slow decay',      desc: 'Rocks stay on the ground 8s longer.',    max: 3 },
+  { id: 'dampers',    name: 'Blast dampers',   desc: 'Blasts reach you from 12% less far.',    max: 4 },
+];
 
 // ---------- expeditions (prestige) ----------
 // From PRESTIGE_STAGE on, the run can be cashed in for star shards. Stage, cash and gear

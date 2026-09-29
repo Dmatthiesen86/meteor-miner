@@ -1,5 +1,5 @@
 // Everything is drawn with canvas primitives, in logical units (view is H tall).
-import { H, GROUND_Y, ORES, METEOR_STYLE } from './config.js';
+import { H, GROUND_Y, ORES, METEOR_STYLE, PLANETS } from './config.js';
 import { G } from './state.js';
 import { input } from './input.js';
 import { blastRadius, magnetRadius, GUN_Y, TOWER_Y, PLAYER_H } from './game.js';
@@ -26,13 +26,26 @@ function ridge(ctx, camX, vw, parallax, base, amp, color) {
   ctx.fill();
 }
 
-function drawBackground(ctx, vw, camX, t) {
+function drawBackground(ctx, vw, camX, t, planet) {
   const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  sky.addColorStop(0, '#070816');
-  sky.addColorStop(0.6, '#1a1838');
-  sky.addColorStop(1, '#43284f');
+  sky.addColorStop(0, planet.sky[0]);
+  sky.addColorStop(0.6, planet.sky[1]);
+  sky.addColorStop(1, planet.sky[2]);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, vw, GROUND_Y);
+
+  // a neighbouring world hanging in the sky, different on every planet
+  const dx = ((vw * 0.74 - camX * 0.04) % (vw + 120) + vw + 120) % (vw + 120) - 60;
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = planet.disc;
+  ctx.beginPath();
+  ctx.arc(dx, 170, 30, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = planet.sky[1];
+  ctx.beginPath();
+  ctx.arc(dx + 12, 163, 27, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 
   for (const s of stars) {
     const x = ((s.x * 1400 - camX * 0.08) % vw + vw) % vw;
@@ -42,19 +55,20 @@ function drawBackground(ctx, vw, camX, t) {
   }
   ctx.globalAlpha = 1;
 
-  ridge(ctx, camX, vw, 0.25, GROUND_Y - 70, 50, '#2a2144');
-  ridge(ctx, camX + 300, vw, 0.5, GROUND_Y - 30, 34, '#211a36');
+  ridge(ctx, camX, vw, 0.25, GROUND_Y - 70, 50, planet.ridge[0]);
+  ridge(ctx, camX + 300, vw, 0.5, GROUND_Y - 30, 34, planet.ridge[1]);
 }
 
-function drawGround(ctx, W) {
-  ctx.fillStyle = '#2b2238';
+function drawGround(ctx, W, planet) {
+  const [dirt, rim, band, pebble] = planet.ground;
+  ctx.fillStyle = dirt;
   ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-  ctx.fillStyle = '#6a5a7a';
+  ctx.fillStyle = rim;
   ctx.fillRect(0, GROUND_Y, W, 3);
-  ctx.fillStyle = '#3a2f4a';
+  ctx.fillStyle = band;
   ctx.fillRect(0, GROUND_Y + 3, W, 7);
   // pebbles, so scrolling is visible
-  ctx.fillStyle = '#3d3250';
+  ctx.fillStyle = pebble;
   for (let x = 14; x < W; x += 46) {
     const y = GROUND_Y + 22 + ((x * 37) % 80);
     ctx.fillRect(x + ((x * 13) % 17), y, 6, 3);
@@ -63,7 +77,7 @@ function drawGround(ctx, W) {
   ctx.fillStyle = '#05060e';
   ctx.fillRect(-2000, 0, 2000, H);
   ctx.fillRect(W, 0, 2000, H);
-  ctx.fillStyle = '#6a5a7a';
+  ctx.fillStyle = rim;
   ctx.fillRect(-3, 0, 3, GROUND_Y);
   ctx.fillRect(W, 0, 3, GROUND_Y);
 }
@@ -71,9 +85,9 @@ function drawGround(ctx, W) {
 function drawLandingMarkers(ctx) {
   for (const m of G.meteors) {
     const t = (GROUND_Y - m.y) / m.vy;
-    if (t > 3.2) continue;
+    if (t > 3.2 && m.kind !== 'titan') continue;       // the titan's mark shows all the way down
     const x = m.x + m.vx * t;
-    const near = 1 - Math.max(0, t) / 3.2;
+    const near = Math.max(0, 1 - Math.max(0, t) / 3.2);
     ctx.fillStyle = `rgba(255, 90, 60, ${0.12 + 0.45 * near})`;
     ctx.beginPath();
     ctx.ellipse(x, GROUND_Y + 2, blastRadius(m.r), 5, 0, 0, TAU);
@@ -118,7 +132,7 @@ function drawMeteor(ctx, m) {
   }
   ctx.restore();
 
-  if (m.hp < m.maxHp) {
+  if (m.hp < m.maxHp && m !== G.boss) {
     const w = Math.max(18, m.r * 1.6), x = m.x - w / 2, y = m.y - m.r - 9;
     ctx.fillStyle = 'rgba(0, 0, 0, .6)';
     ctx.fillRect(x - 1, y - 1, w + 2, 5);
@@ -131,6 +145,7 @@ function drawUfo(ctx, u, time) {
   ctx.save();
   ctx.translate(u.x, u.y);
   ctx.rotate(Math.max(-0.25, Math.min(0.25, u.vx * 0.002)));
+  if (u.boss) ctx.scale(2.4, 2.4);
   const lit = u.flash > 0;
   ctx.fillStyle = lit ? '#fff' : 'rgba(143, 233, 255, .75)';          // dome
   ctx.beginPath();
@@ -154,7 +169,7 @@ function drawUfo(ctx, u, time) {
     ctx.fill();
   }
   ctx.restore();
-  if (u.hp < u.maxHp) {
+  if (u.hp < u.maxHp && !u.boss) {
     ctx.fillStyle = 'rgba(0, 0, 0, .6)';
     ctx.fillRect(u.x - 25, u.y - 26, 50, 5);
     ctx.fillStyle = '#ff7ad9';
@@ -364,6 +379,19 @@ function drawControls(ctx, vw) {
   }
 }
 
+// Boss name and health across the top of the screen.
+function drawBossBar(ctx, vw) {
+  const b = G.boss, w = vw - 60, x = 30, y = 84;
+  ctx.fillStyle = 'rgba(0, 0, 0, .6)';
+  ctx.fillRect(x - 2, y - 2, w + 4, 12);
+  ctx.fillStyle = '#ff6b5e';
+  ctx.fillRect(x, y, w * Math.max(0, b.hp / b.maxHp), 8);
+  ctx.fillStyle = '#fff';
+  ctx.font = '800 11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(b.name.toUpperCase(), vw / 2, y + 22);
+}
+
 // Strip along the top showing the whole map once it is wider than the screen.
 function drawMinimap(ctx, vw, camX) {
   const W = G.worldW;
@@ -395,13 +423,14 @@ export function render(ctx, time) {
   ctx.setTransform(v.dpr * v.scale, 0, 0, v.dpr * v.scale, 0, 0);
   const inGame = !!G.player && G.mode !== 'menu';
   const camX = inGame ? v.camX : 0;
+  const planet = inGame && G.cfg ? G.cfg.planet : PLANETS[0];
 
-  drawBackground(ctx, vw, camX, time);
+  drawBackground(ctx, vw, camX, time, planet);
 
   ctx.save();
   const sh = G.shake;
   ctx.translate(-camX + (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh);
-  drawGround(ctx, inGame ? G.worldW : vw);
+  drawGround(ctx, inGame ? G.worldW : vw, planet);
 
   if (inGame) {
     const p = G.player, up = G.profile.up;
@@ -472,12 +501,13 @@ export function render(ctx, time) {
   if (inGame) {
     drawControls(ctx, vw);
     drawMinimap(ctx, vw, camX);
+    if (G.boss) drawBossBar(ctx, vw);
     if (G.banner) {
       ctx.globalAlpha = Math.min(1, G.banner.life) * (0.6 + 0.4 * Math.sin(time * 14));
       ctx.fillStyle = G.banner.color;
-      ctx.font = '800 24px system-ui, sans-serif';
+      ctx.font = `800 ${Math.min(24, Math.floor(vw * 1.75 / G.banner.text.length))}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(G.banner.text, vw / 2, 110);
+      ctx.fillText(G.banner.text, vw / 2, G.boss ? 140 : 110);
       ctx.globalAlpha = 1;
     }
     if (G.mode === 'clearing') {

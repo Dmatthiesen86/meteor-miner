@@ -120,6 +120,17 @@ html, body {
   margin-top: 14px; padding-bottom: 4px;
   color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
 }
+.planet-warn { color: #8fe9ff !important; font-weight: 700; font-size: 13px; margin: 4px 0 0 !important; }
+.boons-held { font-size: 12.5px; text-align: left !important; margin: 0 0 4px !important; }
+.boons-held b { color: var(--accent); }
+.boon-card {
+  display: block; width: 100%; margin-top: 10px; padding: 14px; border-radius: 14px; text-align: left;
+  border: 1px solid var(--accent); background: var(--panel-2); color: var(--text); font: inherit;
+}
+.boon-card:active { transform: scale(.98); background: rgba(255, 179, 71, .14); }
+.boon-card .name { display: block; font-weight: 800; font-size: 17px; color: var(--accent); }
+.boon-card .lvl { color: var(--dim); font-weight: 600; font-size: 12.5px; margin-left: 8px; }
+.boon-card .desc { display: block; color: var(--dim); font-size: 14px; margin-top: 2px; }
 .threat-warn { color: var(--money) !important; font-weight: 700; font-size: 13px; margin: 4px 0 0 !important; }
 .btn.shard { border-color: #c58bff; color: #e3c8ff; background: rgba(120, 70, 180, .25); }
 .shop-item button.shard { border-color: #c58bff; color: #e3c8ff; }
