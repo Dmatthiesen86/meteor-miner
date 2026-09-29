@@ -10,7 +10,7 @@ const TOWER_SPACING = 30;
 const MAX_PARTS = 350;
 const TOWER_SHIELD_RECHARGE = 12;   // seconds without a hit before a tower's shield refills
 const TOWER_TURN = 4;                // rad/s an auto-targeting tower can swing its barrel
-const ROCKET_SPEED = 380, ROCKET_INTERVAL = 3.2;
+const ROCKET_SPEED = 380, ROCKET_INTERVAL = 3.2, GUN_ROCKET_INTERVAL = 2.5;
 const ROCKET_TURN = 5;               // rad/s a homing rocket can steer
 const HOMING_RANGE = 420;
 const UFO_R = 20, UFO_SHOT_SPEED = 230;
@@ -28,6 +28,7 @@ export const blastRadius = r => r * 1.5 + 14;
 export const gunStats = up => ({ dmg: 1 + up.damage, interval: 0.3 / (1 + 0.2 * up.rate) });
 export const towerStats = up => ({ dmg: 1 + up.towerDamage, interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor, shield: up.towerShield });
 export const rocketStats = up => ({ dmg: (2 + up.rockets) * (1 + up.towerDamage), blast: 40 + 9 * up.rockets });
+export const gunRocketStats = up => ({ dmg: (2 + up.gunRockets) * (1 + up.damage), blast: 40 + 9 * up.gunRockets });
 export const magnetRadius = up => 34 + 20 * up.magnet;
 export const maxHearts = up => 3 + up.armor;
 
@@ -46,6 +47,7 @@ export function startStage() {
   G.time = 0;
   G.spawnT = 1.2;
   G.gunT = 0;
+  G.gunRocketT = 1;
   G.shake = 0;
   G.aim = -Math.PI / 2;
   input.deploy = false;
@@ -467,6 +469,14 @@ export function update(dt) {
         G.gunT = g.interval;
         fire(p.x + Math.cos(G.aim) * 16, GUN_Y + Math.sin(G.aim) * 16, G.aim, g.dmg, '#ffe9a8');
         sfx.shoot();
+      }
+      if (up.gunRockets) {
+        G.gunRocketT -= dt;
+        if (G.gunRocketT <= 0) {
+          G.gunRocketT = GUN_ROCKET_INTERVAL;
+          fireRocket(p.x + Math.cos(G.aim) * 16, GUN_Y + Math.sin(G.aim) * 16, G.aim, gunRocketStats(up), !!up.homing);
+          sfx.rocket();
+        }
       }
     }
   }

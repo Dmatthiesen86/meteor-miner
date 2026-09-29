@@ -39,7 +39,7 @@ export function stageConfig(n) {
 }
 
 // `cost(level)` is the price of the next purchase when `level` are already owned.
-// `needs` is another item that must be owned first; `minStage` holds late-game gear back.
+// `needs` is an item (or any one of a list) that must be owned first; `minStage` holds late-game gear back.
 export const SHOP = [
   { group: 'Miner' },
   { id: 'boots',      name: 'Boots',          desc: 'Run faster.',                                   max: 6,  cost: l => Math.round(40 * Math.pow(1.6, l)) },
@@ -51,6 +51,7 @@ export const SHOP = [
   { id: 'gun',        name: 'Blaster',        desc: 'Auto-fires wherever you point.',                max: 1,  cost: () => 50 },
   { id: 'damage',     name: 'Blaster damage', desc: '+1 damage per shot.',                           max: 10, cost: l => Math.round(60 * Math.pow(1.55, l)), needs: 'gun' },
   { id: 'rate',       name: 'Fire rate',      desc: 'Blaster shoots 20% faster.',                    max: 8,  cost: l => Math.round(70 * Math.pow(1.5, l)),  needs: 'gun' },
+  { id: 'gunRockets', name: 'Blaster rockets', desc: 'Blaster also fires an exploding rocket every 2.5s. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(600 * Math.pow(1.6, l)), needs: 'gun', minStage: 6 },
 
   { group: 'Towers' },
   { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Fires non-stop the way you aim it.', max: 6, cost: l => 120 + 80 * l },
@@ -61,7 +62,7 @@ export const SHOP = [
   { id: 'towerRepair', name: 'Tower repair',  desc: l => `Towers mend 1 health every ${REPAIR_SECONDS[Math.min(l, REPAIR_SECONDS.length - 1)]}s.`, max: 5, cost: l => Math.round(100 * Math.pow(1.6, l)), needs: 'towers' },
   { id: 'autoTarget', name: 'Auto-targeting', desc: 'Towers track and lead the nearest threat on their own.', max: 1, cost: () => 900, needs: 'towers', minStage: 6 },
   { id: 'rockets',    name: 'Rocket launcher', desc: 'Towers also fire exploding rockets. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(700 * Math.pow(1.6, l)), needs: 'towers', minStage: 8 },
-  { id: 'homing',     name: 'Homing rockets', desc: 'Rockets steer themselves onto the nearest target.', max: 1, cost: () => 1500, needs: 'rockets', minStage: 8 },
+  { id: 'homing',     name: 'Homing rockets', desc: 'All rockets, blaster and tower, steer themselves onto the nearest target.', max: 1, cost: () => 1500, needs: ['rockets', 'gunRockets'], minStage: 6 },
 ];
 
 // Seconds per point of tower repair at each level of the repair upgrade (index = level - 1).

@@ -55,7 +55,8 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   you and fire at you and your towers. Shoot them down for crystals and gold; if you can't,
   they leave 15 s after the shower ends.
 - **Auto-targeting** (from stage 6) makes towers track and lead the nearest threat.
-  **Rocket launchers** (from stage 8) add an exploding rocket every ~3 s, and
+  **Blaster rockets** (from stage 6) and tower **rocket launchers** (from stage 8) add
+  exploding rockets, and
   **Homing rockets** make them steer onto the nearest target.
 - Dying loses the rocks from that stage only. Cash, gear and towers are kept.
 - Progress saves in the browser (per device).

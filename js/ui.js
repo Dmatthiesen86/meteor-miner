@@ -82,12 +82,13 @@ export function showShop(summary) {
     if (it.group) return `<div class="shop-group">${it.group}</div>`;
     const lvl = up[it.id];
     const tooEarly = it.minStage && p.stage < it.minStage;
-    const locked = tooEarly || (it.needs && !up[it.needs]);
+    const needs = [].concat(it.needs || []);
+    const locked = tooEarly || (needs.length > 0 && !needs.some(id => up[id]));
     const maxed = lvl >= it.max;
     const cost = it.cost(lvl);
     const label = maxed ? 'MAX' : locked ? 'Locked' : money(cost);
     const desc = tooEarly ? `Unlocks at stage ${it.minStage}.`
-      : locked ? `Needs a ${SHOP.find(s => s.id === it.needs).name.toLowerCase()} first.`
+      : locked ? `Requires ${needs.map(id => SHOP.find(s => s.id === id).name.toLowerCase()).join(' or ')}.`
       : typeof it.desc === 'function' ? it.desc(lvl) : it.desc;
     const level = it.max === 1 ? (lvl ? 'Owned' : '') : it.id === 'towers' ? `Owned ${lvl}/${it.max}` : lvl ? `Lv ${lvl}` : '';
     return `
