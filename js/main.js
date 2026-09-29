@@ -38,5 +38,10 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
+// Offline play: the service worker caches the whole game on first visit.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
 // Handy in the browser console while tuning: G.profile.money = 5000, etc.
 window.G = G;

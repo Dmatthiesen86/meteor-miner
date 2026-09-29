@@ -2,7 +2,7 @@
 import { H, GROUND_Y, ORES } from './config.js';
 import { G } from './state.js';
 import { input } from './input.js';
-import { blastRadius, magnetRadius, GUN_Y, TOWER_Y, TOWER_HP, PLAYER_H } from './game.js';
+import { blastRadius, magnetRadius, GUN_Y, TOWER_Y, PLAYER_H } from './game.js';
 
 const TAU = Math.PI * 2;
 
@@ -166,10 +166,11 @@ function drawTower(ctx, t) {
   ctx.beginPath();
   ctx.arc(0, TOWER_Y, 7, 0, TAU);
   ctx.fill();
-  // health pips
-  for (let i = 0; i < TOWER_HP; i++) {
+  // health pips, squeezed to fit under the tower however much armor it has
+  const step = Math.min(7, 30 / t.maxHp);
+  for (let i = 0; i < t.maxHp; i++) {
     ctx.fillStyle = i < t.hp ? '#6fe39a' : '#3a3f5c';
-    ctx.fillRect(-9 + i * 7, GROUND_Y + 5, 5, 3);
+    ctx.fillRect(-step * t.maxHp / 2 + i * step + 1, GROUND_Y + 5, step - 2, 3);
   }
   ctx.restore();
 }

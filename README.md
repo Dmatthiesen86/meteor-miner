@@ -11,7 +11,11 @@ Plain HTML + canvas + JavaScript modules. No build step, no dependencies, no art
 
 Live at **https://dmatthiesen86.github.io/meteor-miner/** (PC or phone, portrait on phones).
 
-**Publishing changes**: commit and push to `main`; GitHub Pages updates in a minute or two.
+Works offline after the first visit. On a phone, use the browser's **Add to Home Screen**
+and launch it from the icon once while online; after that it runs with no internet.
+
+**Publishing changes**: bump `CACHE` in `sw.js`, commit and push to `main`. Devices pick up
+the new version the next time the game is opened with internet (it applies on the launch after).
 
 ## Run it locally
 
@@ -43,7 +47,7 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   ones split in two first.
 - Rocks vanish after ~16 s, so go get them. Anything still on the ground when the stage
   ends is swept up for you.
-- Towers take 3 blasts. A destroyed tower is gone; surviving towers come back next stage.
+- Towers take 3 blasts (more with tower armor). A destroyed tower is gone; surviving towers come back next stage.
 - Dying loses the rocks from that stage only. Cash, gear and towers are kept.
 - Progress saves in the browser (per device).
 

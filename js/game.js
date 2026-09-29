@@ -13,14 +13,13 @@ const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the groun
 export const PLAYER_H = 36;
 export const GUN_Y = GROUND_Y - 24;
 export const TOWER_Y = GROUND_Y - 22;
-export const TOWER_HP = 3;
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const blastRadius = r => r * 1.5 + 14;
 export const gunStats = up => ({ dmg: 1 + up.damage, interval: 0.3 / (1 + 0.2 * up.rate) });
-export const towerStats = up => ({ dmg: 1 + up.towerPower, interval: 0.55 / (1 + 0.15 * up.towerPower) });
+export const towerStats = up => ({ dmg: 1 + up.towerDamage, interval: 0.55, hp: 3 + up.towerArmor });
 export const magnetRadius = up => 34 + 20 * up.magnet;
 export const maxHearts = up => 3 + up.armor;
 
@@ -214,7 +213,8 @@ function deployTower() {
     floater(near.x, TOWER_Y - 26, 'Re-aimed', '#b9f1ff');
   } else if (G.towersLeft > 0) {
     G.towersLeft--;
-    G.towers.push({ x: G.player.x, angle: G.aim, cd: 0.3, hp: TOWER_HP, flash: 0.2, dead: false });
+    const hp = towerStats(G.profile.up).hp;
+    G.towers.push({ x: G.player.x, angle: G.aim, cd: 0.3, hp, maxHp: hp, flash: 0.2, dead: false });
     sfx.deploy();
   } else {
     sfx.deny();

@@ -11,7 +11,7 @@ export function newProfile() {
     best: 1,
     money: 0,
     cargo: emptyCargo(),
-    up: { gun: 0, damage: 0, rate: 0, towers: 0, towerPower: 0, boots: 0, magnet: 0, armor: 0 },
+    up: { gun: 0, damage: 0, rate: 0, towers: 0, towerDamage: 0, towerArmor: 0, boots: 0, magnet: 0, armor: 0 },
     muted: false,
   };
 }
@@ -21,7 +21,11 @@ function load() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (!s || !s.up) return null;
     const base = newProfile();
-    return { ...base, ...s, up: { ...base.up, ...s.up }, cargo: { ...base.cargo, ...s.cargo } };
+    const up = { ...base.up, ...s.up };
+    // Saves from before tower power was split into damage and armor.
+    if (up.towerPower) { up.towerDamage = Math.max(up.towerDamage, up.towerPower); }
+    delete up.towerPower;
+    return { ...base, ...s, up, cargo: { ...base.cargo, ...s.cargo } };
   } catch {
     return null;
   }
