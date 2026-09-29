@@ -35,7 +35,7 @@ python -m http.server 5174
 |---|---|---|
 | Run | drag in the strip below the ground | A / D or arrow keys |
 | Aim | touch the sky (aim stays where you left it) | mouse |
-| Jump | Jump button | Space, W or up arrow |
+| Jump | tap anywhere on the bottom strip (other thumb while running) | Space, W or up arrow |
 | Place / re-aim tower | tower button | T or E |
 | Use a supply | round buttons bottom left | 1 (nuke), 2 (time slow), 3 (shield cell) |
 | Pause / mute | buttons top right | P or Esc / M |

@@ -1,5 +1,5 @@
 // Touch + mouse + keyboard.
-//   Touch:    drag in the strip below the ground to run, touch the sky to aim.
+//   Touch:    drag in the strip below the ground to run, tap it to jump, touch the sky to aim.
 //   Desktop:  A/D or arrow keys to run, Space / W / Up to jump, mouse to aim, T / E for towers, 1 / 2 / 3 for supplies.
 import { G } from './state.js';
 import { GROUND_Y } from './config.js';
@@ -15,6 +15,7 @@ export const input = {
 };
 
 const STICK_RANGE = 36, STICK_DEAD = 0.18;
+const TAP_MS = 220, TAP_SLOP = 12;   // a touch this short and this still is a tap, not a drag
 const keys = new Set();
 let movePtr = null, aimPtr = null;
 
@@ -37,9 +38,10 @@ export function initInput(canvas, handlers) {
     handlers.unlock();
     const p = logical(e);
     if (p.y > GROUND_Y) {
-      if (movePtr !== null) return;
+      // A second finger on the strip while the first is steering: jump at once.
+      if (movePtr !== null) { input.jump = true; return; }
       movePtr = e.pointerId;
-      input.stick = { x0: p.x, x: p.x, y: p.y };
+      input.stick = { x0: p.x, x: p.x, y: p.y, startX: p.x, t: performance.now(), moved: false };
     } else {
       aimPtr = e.pointerId;
       input.aimPoint = p;
@@ -53,6 +55,7 @@ export function initInput(canvas, handlers) {
     if (e.pointerId === movePtr) {
       const s = input.stick;
       s.x = p.x;
+      if (Math.abs(p.x - s.startX) > TAP_SLOP) s.moved = true;
       // The anchor trails the finger so reversing direction never needs a long drag back.
       s.x0 = clamp(s.x0, s.x - STICK_RANGE * 1.4, s.x + STICK_RANGE * 1.4);
       const v = clamp((s.x - s.x0) / STICK_RANGE, -1, 1);
@@ -64,6 +67,9 @@ export function initInput(canvas, handlers) {
 
   const release = e => {
     if (e.pointerId === movePtr) {
+      // A lone quick tap can only be told from a drag once the finger lifts.
+      const s = input.stick;
+      if (e.type === 'pointerup' && !s.moved && performance.now() - s.t < TAP_MS) input.jump = true;
       movePtr = null;
       input.stick = null;
       input.move = keyMove();

@@ -375,7 +375,7 @@ function drawControls(ctx, vw) {
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, .35)';
     ctx.fillText('or use A / D  ·  touch the sky to aim', vw / 2, GROUND_Y + 80);
-    if (G.obstacles.length) ctx.fillText('Jump button or Space to hop boulders', vw / 2, GROUND_Y + 100);
+    ctx.fillText('tap down here (or Space) to jump', vw / 2, GROUND_Y + 100);
   }
 }
 

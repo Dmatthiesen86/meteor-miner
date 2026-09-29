@@ -6,7 +6,7 @@ import { startStage, towerInReach, fillMissions } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
 
 const $ = id => document.getElementById(id);
-const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), jumpBtn = $('jumpBtn'), itemsBar = $('items');
+const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), itemsBar = $('items');
 // Whole dollars below `compactFrom`, then 3 significant figures: $125K, $1.87M.
 function money(n, compactFrom = 100000) {
   if (n < compactFrom) return '$' + Math.round(n).toLocaleString();
@@ -29,7 +29,6 @@ function panel(html) {
   overlay.hidden = false;
   hud.hidden = true;
   towerBtn.hidden = true;
-  jumpBtn.hidden = true;
   itemsBar.hidden = true;
 }
 
@@ -53,7 +52,7 @@ export function showMenu() {
     <p class="tag">Dodge the meteors. Grab the rocks. Sell. Gear up.</p>
     <div class="how">
       <b>Run</b> - drag along the bottom strip, or A / D / arrow keys.<br>
-      <b>Jump</b> - Jump button, or Space / W. Bigger maps have boulders to hop over.<br>
+      <b>Jump</b> - tap anywhere along the bottom strip, or Space / W. While running, tap with your other thumb. Bigger maps have boulders to hop over.<br>
       <b>Aim</b> - touch the sky or move the mouse. Your blaster fires on its own.<br>
       <b>Towers</b> - aim, then tap the tower button (or T) to plant one. Stand on it and tap again to re-aim.<br>
       <b>UFOs</b> shoot back on stages 5, 15, 25... and a <b>boss</b> arrives every 10th stage.<br>
@@ -359,7 +358,6 @@ export function updateHUD() {
     if (n) { anyItem = true; setText('use-' + it.id, `${it.label}<b>${n}</b>`); }
   }
   itemsBar.hidden = !anyItem;
-  jumpBtn.hidden = G.obstacles.length === 0;
   const hasTowers = prof.up.towers > 0;
   towerBtn.hidden = !hasTowers;
   if (hasTowers) {
@@ -386,11 +384,6 @@ export function initUI() {
     unlock();
     input.use = btn.dataset.use;
   }));
-  jumpBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    unlock();
-    input.jump = true;
-  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && G.mode === 'playing') togglePause();
   });
