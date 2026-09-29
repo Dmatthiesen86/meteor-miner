@@ -11,7 +11,7 @@ export function newProfile() {
     best: 1,
     money: 0,
     cargo: emptyCargo(),
-    up: { gun: 0, damage: 0, rate: 0, gunAuto: 0, gunRockets: 0, shield: 0, towers: 0, towerDamage: 0, towerRate: 0, towerArmor: 0, towerShield: 0, towerRepair: 0, autoTarget: 0, rockets: 0, homing: 0, boots: 0, magnet: 0, armor: 0 },
+    up: { gun: 0, damage: 0, rate: 0, gunAuto: 0, gunRockets: 0, shield: 0, towers: 0, towerDamage: 0, towerRate: 0, towerArmor: 0, towerShield: 0, towerRepair: 0, towerInsurance: 0, autoTarget: 0, rockets: 0, homing: 0, boots: 0, magnet: 0, armor: 0 },
     muted: false,
   };
 }

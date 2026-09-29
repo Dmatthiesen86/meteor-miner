@@ -42,6 +42,7 @@ export function startStage() {
   G.meteors = []; G.ufos = []; G.shots = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = [];
   G.obstacles = makeObstacles(cfg);
   G.towersLeft = p.up.towers;
+  G.towersStart = p.up.towers;
   G.haul = emptyCargo();
   G.stats = { destroyed: 0, landed: 0, ufos: 0 };
   G.ufosToSpawn = cfg.ufos;
@@ -392,8 +393,12 @@ function finishStage() {
   for (const r of G.rocks) G.haul[r.ore]++;          // anything still lying around is swept up
   G.rocks = [];
   for (const k of ORE_KEYS) p.cargo[k] += G.haul[k];
-  p.up.towers = G.towersLeft + G.towers.length;       // destroyed towers are gone for good
-  const summary = { stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos, hp: G.player.hp };
+  // destroyed towers are gone for good, except the ones insurance pays for
+  const survived = G.towersLeft + G.towers.length;
+  const lost = G.towersStart - survived;
+  const replaced = Math.min(lost, p.up.towerInsurance);
+  p.up.towers = survived + replaced;
+  const summary = { stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos, hp: G.player.hp, lost, replaced };
   p.stage++;
   p.best = Math.max(p.best, p.stage);
   G.hasSave = true;

@@ -111,6 +111,7 @@ export function showShop(summary) {
         <span>Meteors shot down</span><span>${summary.destroyed}</span>
         <span>Meteors landed</span><span>${summary.landed}</span>
         ${summary.ufos ? `<span>UFOs shot down</span><span>${summary.ufos}</span>` : ''}
+        ${summary.lost ? `<span>Towers destroyed</span><span>${summary.lost}${summary.replaced ? ` (${summary.replaced} replaced by insurance)` : ''}</span>` : ''}
       </div>` : ''}
     <div class="wallet"><span>Cash</span><span class="cash">${money(p.money)}</span></div>
     <div class="cargo-box">

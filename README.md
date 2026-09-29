@@ -55,6 +55,7 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   clears any of them. Towers can't be planted on a boulder.
 - **Blaster auto-targeting** (from stage 6) aims the blaster for you. Touching the sky, or
   holding the mouse button, takes manual control while held.
+- Tower insurance replaces destroyed towers for free at the end of the stage, one per level.
 - With tower repair, damaged towers mend 1 health every few seconds (the timer restarts when hit).
 - **UFOs** arrive on every 5th stage (one on stage 5, two on 10, three from 15). They hover over
   you and fire at you and your towers. Shoot them down for crystals and gold; if you can't,

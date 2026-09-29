@@ -63,6 +63,7 @@ export const SHOP = [
   { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.6, l)),  needs: 'towers' },
   { id: 'towerShield', name: 'Tower shield',  desc: 'Towers absorb 1 blast per level. Recharges 12s after a hit.', max: 4, cost: l => Math.round(110 * Math.pow(1.7, l)), needs: 'towers' },
   { id: 'towerRepair', name: 'Tower repair',  desc: l => `Towers mend 1 health every ${REPAIR_SECONDS[Math.min(l, REPAIR_SECONDS.length - 1)]}s.`, max: 5, cost: l => Math.round(100 * Math.pow(1.6, l)), needs: 'towers' },
+  { id: 'towerInsurance', name: 'Tower insurance', desc: 'Replaces 1 destroyed tower per level for free when a stage ends.', max: 6, cost: l => Math.round(150 * Math.pow(1.5, l)), needs: 'towers' },
   { id: 'autoTarget', name: 'Auto-targeting', desc: 'Towers track and lead the nearest threat on their own.', max: 1, cost: () => 900, needs: 'towers', minStage: 6 },
   { id: 'rockets',    name: 'Rocket launcher', desc: 'Towers also fire exploding rockets. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(700 * Math.pow(1.6, l)), needs: 'towers', minStage: 8 },
   { id: 'homing',     name: 'Homing rockets', desc: 'All rockets, blaster and tower, steer themselves onto the nearest target.', max: 1, cost: () => 1500, needs: ['rockets', 'gunRockets'], minStage: 6 },
