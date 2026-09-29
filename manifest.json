@@ -1,0 +1,13 @@
+{
+  "name": "Meteor Miner",
+  "short_name": "Meteor Miner",
+  "description": "Dodge the meteors, collect the rocks, sell them, gear up.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d1a",
+  "theme_color": "#0b0d1a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

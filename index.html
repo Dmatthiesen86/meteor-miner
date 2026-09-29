@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Meteor Miner">
+  <title>Meteor Miner</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div class="hud-row">
+      <span id="hearts" class="hearts"></span>
+      <span id="stage" class="pill"></span>
+      <span class="spacer"></span>
+      <span id="cargo" class="pill cargo"></span>
+      <span id="money" class="pill money"></span>
+      <button id="muteBtn" class="icon-btn" aria-label="Sound"></button>
+      <button id="pauseBtn" class="icon-btn" aria-label="Pause">II</button>
+    </div>
+    <div class="progress"><i id="progress"></i></div>
+  </div>
+
+  <button id="towerBtn" hidden></button>
+  <div id="overlay" hidden></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
