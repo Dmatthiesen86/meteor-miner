@@ -1,5 +1,5 @@
 // The simulation: player, meteors, rocks, bullets, towers and stage flow.
-import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, stageConfig } from './config.js';
+import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, stageConfig, pickKind, bestOre } from './config.js';
 import { G, save, emptyCargo } from './state.js';
 import { input } from './input.js';
 import { sfx } from './audio.js';
@@ -17,6 +17,9 @@ const UFO_R = 20, UFO_SHOT_SPEED = 230;
 const UFO_LINGER = 15;               // seconds after the shower before UFOs give up and leave
 const JUMP_SPEED = 430, JUMP_GRAVITY = 1400;   // one fixed jump, ~66 high: clears every boulder
 const GUN_TURN = 8;                  // rad/s the auto-targeting blaster swings
+const MAX_METEORS = 90;              // spawning pauses above this, to keep phones smooth
+const IRON_BULLET_FACTOR = 0.25;     // share of bullet damage an armored meteor takes
+const ICE_LIFE = 7, FIRE_LIFE = 5;
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -27,10 +30,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const blastRadius = r => r * 1.5 + 14;
-export const gunStats = up => ({ dmg: 1 + up.damage, interval: 0.3 / (1 + 0.2 * up.rate) });
-export const towerStats = up => ({ dmg: 1 + up.towerDamage, interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor, shield: up.towerShield });
-export const rocketStats = up => ({ dmg: (2 + up.rockets) * (1 + up.towerDamage), blast: 40 + 9 * up.rockets });
-export const gunRocketStats = up => ({ dmg: (2 + up.gunRockets) * (1 + up.damage), blast: 40 + 9 * up.gunRockets });
+const power = () => 1 + 0.1 * G.profile.perks.power;          // Hot rounds perk
+export const gunStats = up => ({ dmg: (1 + up.damage) * power(), interval: 0.3 / (1 + 0.2 * up.rate) });
+export const towerStats = up => ({ dmg: (1 + up.towerDamage) * power(), interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor, shield: up.towerShield });
+export const rocketStats = up => ({ dmg: (2 + up.rockets) * (1 + up.towerDamage) * power(), blast: 40 + 9 * up.rockets });
+export const gunRocketStats = up => ({ dmg: (2 + up.gunRockets) * (1 + up.damage) * power(), blast: 40 + 9 * up.gunRockets });
 export const magnetRadius = up => 34 + 20 * up.magnet;
 export const maxHearts = up => 3 + up.armor;
 
@@ -39,7 +43,7 @@ export function startStage() {
   G.cfg = cfg;
   G.worldW = cfg.worldW;
   G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1, jy: 0, vjump: 0 };
-  G.meteors = []; G.ufos = []; G.shots = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = [];
+  G.meteors = []; G.ufos = []; G.shots = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = []; G.patches = [];
   G.obstacles = makeObstacles(cfg);
   G.towersLeft = p.up.towers;
   G.towersStart = p.up.towers;
@@ -47,7 +51,8 @@ export function startStage() {
   G.stats = { destroyed: 0, landed: 0, ufos: 0 };
   G.ufosToSpawn = cfg.ufos;
   G.nextUfoT = cfg.duration * 0.25;
-  G.banner = cfg.obstacles && cfg.n <= 4 ? { text: 'JUMP THE BOULDERS', life: 3.5, color: '#ffd166' } : null;
+  G.banner = cfg.newThreat ? { text: 'NEW: ' + cfg.newThreat.name.toUpperCase(), life: 4, color: '#ffd166' }
+    : cfg.obstacles && cfg.n <= 4 ? { text: 'JUMP THE BOULDERS', life: 3.5, color: '#ffd166' } : null;
   G.time = 0;
   G.spawnT = 1.2;
   G.gunT = 0;
@@ -106,11 +111,12 @@ function pickOre(weights) {
   return 'stone';
 }
 
-function makeMeteor(x, y, vx, vy, r, ore) {
-  const hp = Math.max(1, Math.round(Math.pow(r / 11, 2) * G.cfg.hpMul));
+function makeMeteor(x, y, vx, vy, r, ore, kind = 'normal') {
+  const hp = Math.max(1, Math.round(Math.pow(r / 11, 2) * G.cfg.hpMul * (kind === 'iron' ? 1.5 : 1)));
   const n = 9 + Math.floor(Math.random() * 4);
   return {
-    x, y, vx, vy, r, ore, hp, maxHp: hp,
+    x, y, vx, vy, r, ore, hp, maxHp: hp, kind,
+    burstY: rand(170, 300),          // where a cluster meteor comes apart
     rot: rand(0, Math.PI * 2), spin: rand(-1.5, 1.5),
     shape: Array.from({ length: n }, () => rand(0.78, 1.12)),
     flecks: Array.from({ length: 3 + Math.floor(r / 10) }, () => ({ a: rand(0, Math.PI * 2), d: rand(0.15, 0.7), s: rand(0.08, 0.16) })),
@@ -119,8 +125,12 @@ function makeMeteor(x, y, vx, vy, r, ore) {
 }
 
 function spawnMeteor() {
+  if (G.meteors.length >= MAX_METEORS) return;
   const c = G.cfg, W = G.worldW;
-  const r = c.minR + Math.pow(Math.random(), 2.2) * (c.maxR - c.minR);
+  const kind = pickKind(c);
+  let r = c.minR + Math.pow(Math.random(), 2.2) * (c.maxR - c.minR);
+  if (kind === 'golden') r = 22;
+  if (kind === 'cluster') r = Math.max(r, 24);
   const x = rand(r, W - r);
   const tx = clamp(x + rand(-160, 160), r, W - r);
   // Bigger rocks fall slower so there is time to get clear of the larger blast.
@@ -128,7 +138,7 @@ function spawnMeteor() {
   const vy = rand(c.speedMin, c.speedMax) * (1 - 0.35 * bigness);
   const y = -r - 10;
   const t = (GROUND_Y - y) / vy;
-  G.meteors.push(makeMeteor(x, y, (tx - x) / t, vy, r, pickOre(c.oreWeights)));
+  G.meteors.push(makeMeteor(x, y, (tx - x) / t, vy, r, kind === 'golden' ? bestOre(c.n) : pickOre(c.oreWeights), kind));
 }
 
 function spawnUfo() {
@@ -164,7 +174,7 @@ function floater(x, y, text, color) {
 function dropRocks(m, count, onGround) {
   for (let i = 0; i < count; i++) {
     // Mostly the meteor's own ore, with some plain stone mixed in.
-    const ore = Math.random() < 0.7 ? m.ore : 'stone';
+    const ore = m.kind === 'golden' || Math.random() < 0.7 ? m.ore : 'stone';
     G.rocks.push({
       x: m.x + rand(-m.r, m.r) * 0.6,
       y: onGround ? GROUND_Y - 6 : m.y + rand(-m.r, m.r) * 0.5,
@@ -213,7 +223,10 @@ function impact(m) {
   burst(m.x, y, 10 + Math.floor(m.r * 0.6), 160 + m.r * 5, ['#ffb347', '#ff6b3c', '#ffe9a8'], 5, 300, true);
   burst(m.x, y, 8 + Math.floor(m.r * 0.4), 120 + m.r * 3, ['#5b4636', '#7a6150'], 5, 900, true);
   G.parts.push({ ring: true, x: m.x, y: GROUND_Y, r: blast, life: 0.35, max: 0.35 });
-  dropRocks(m, Math.max(1, Math.round(m.r / 9)), true);
+  if (m.kind === 'golden') floater(m.x, GROUND_Y - 30, 'Jackpot lost', '#ffd166');
+  else dropRocks(m, Math.max(1, Math.round(m.r / 9)) * (m.kind === 'iron' ? 2 : 1), true);
+  if (m.kind === 'ice') G.patches.push({ kind: 'ice', x: m.x, r: blast, life: ICE_LIFE, max: ICE_LIFE });
+  if (m.kind === 'fire') G.patches.push({ kind: 'fire', x: m.x, r: blast * 0.8, life: FIRE_LIFE, max: FIRE_LIFE });
 
   if (Math.abs(G.player.x - m.x) < blast + 8) hurtPlayer();
   for (const t of G.towers) {
@@ -245,14 +258,31 @@ function shatter(m) {
   G.stats.destroyed++;
   sfx.shatter(m.r);
   burst(m.x, m.y, 8 + Math.floor(m.r * 0.5), 140 + m.r * 3, ['#7a6150', '#5b4636', ORES[m.ore].color], 4, 500);
-  if (m.r >= 26) {
-    const r2 = m.r * 0.62;
+  const pay = m.kind === 'iron' ? 2 : 1;
+  if (m.kind === 'golden') {
+    G.shake = Math.max(G.shake, 8);
+    floater(m.x, m.y - 20, 'JACKPOT!', '#ffd166');
+    for (let i = 0; i < 10; i++) dropRocks({ ...m, r: 30 }, 1, false);
+  } else if (m.r >= 26) {
+    const r2 = m.r * 0.62, kind = m.kind === 'cluster' ? 'normal' : m.kind;
     for (const dir of [-1, 1]) {
-      G.meteors.push(makeMeteor(m.x + dir * r2 * 0.6, m.y, m.vx + dir * rand(30, 70), m.vy * 0.85, r2, m.ore));
+      G.meteors.push(makeMeteor(m.x + dir * r2 * 0.6, m.y, m.vx + dir * rand(30, 70), m.vy * 0.85, r2, m.ore, kind));
     }
-    dropRocks(m, Math.max(1, Math.round(m.r / 18)), false);
+    dropRocks(m, Math.max(1, Math.round(m.r / 18)) * pay, false);
   } else {
-    dropRocks(m, Math.max(1, Math.round(m.r / 9 * 1.5)), false);
+    dropRocks(m, Math.max(1, Math.round(m.r / 9 * 1.5)) * pay, false);
+  }
+}
+
+// A cluster meteor coming apart on its own, part-way down.
+function scatter(m) {
+  m.dead = true;
+  sfx.shatter(m.r);
+  burst(m.x, m.y, 14, 200, METEOR_STYLE.cluster.trail, 4, 300);
+  const n = 4 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < n; i++) {
+    const spread = (i / (n - 1) - 0.5) * 2;
+    G.meteors.push(makeMeteor(m.x + spread * m.r, m.y, m.vx + spread * rand(70, 130), m.vy * rand(0.85, 1.1), Math.max(9, m.r * 0.42), m.ore));
   }
 }
 
@@ -277,7 +307,7 @@ function damageUfo(u, dmg, bx, by) {
   G.parts.push({ ring: true, x: u.x, y: u.y + 20, r: 60, life: 0.4, max: 0.4 });
   floater(u.x, u.y - 24, 'UFO down!', '#ff7ad9');
   // wreckage is the best loot in the game
-  dropRocks({ x: u.x, y: u.y, r: 26, vy: 0, ore: 'crystal' }, 6 + 2 * G.cfg.ufos, false);
+  dropRocks({ x: u.x, y: u.y, r: 26, vy: 0, ore: bestOre(G.cfg.n) }, 6 + 2 * G.cfg.ufos, false);
   dropRocks({ x: u.x, y: u.y, r: 26, vy: 0, ore: 'gold' }, 4, false);
 }
 
@@ -382,10 +412,11 @@ function deployTower() {
 
 function collect(rock) {
   rock.dead = true;
-  G.haul[rock.ore]++;
+  const lucky = Math.random() < 0.05 * G.profile.perks.luck;
+  G.haul[rock.ore] += lucky ? 2 : 1;
   const o = ORES[rock.ore];
-  sfx.pickup(o.value);
-  floater(rock.x, rock.y - 10, '+$' + o.value, o.color);
+  sfx.pickup(Math.min(o.value, 30));
+  floater(rock.x, rock.y - 10, '+$' + o.value + (lucky ? ' x2' : ''), o.color);
 }
 
 function finishStage() {
@@ -417,7 +448,8 @@ export function update(dt) {
 
   // player
   const speed = 170 + 26 * up.boots;
-  p.vx += (input.move * speed - p.vx) * Math.min(1, dt * 14);
+  const onIce = p.jy === 0 && G.patches.some(q => q.kind === 'ice' && Math.abs(p.x - q.x) < q.r);
+  p.vx += (input.move * speed - p.vx) * Math.min(1, dt * (onIce ? 1.6 : 14));
   const fromX = p.x;
   p.x = clamp(p.x + p.vx * dt, 10, W - 10);
 
@@ -445,6 +477,12 @@ export function update(dt) {
     G.moved = true;
   }
   p.inv = Math.max(0, p.inv - dt);
+  for (const q of G.patches) {
+    q.life -= dt;
+    if (q.kind !== 'fire') continue;
+    if (Math.random() < dt * 30) particle(q.x + rand(-q.r, q.r), GROUND_Y, rand(-10, 10), rand(-90, -40), rand(0.3, 0.6), Math.random() < 0.5 ? '#ff4f2a' : '#ffb347', 4);
+    if (p.jy < 18 && Math.abs(p.x - q.x) < q.r && !clearing) hurtPlayer();
+  }
   updateCamera();
 
   if (up.gunAuto && !input.aimHeld) {
@@ -603,7 +641,7 @@ export function update(dt) {
       b.dead = true;
       if (b.blast) explode(b);
       else if (isUfo) damageUfo(hit, b.dmg, b.x, b.y);
-      else damageMeteor(hit, b.dmg, b.x, b.y);
+      else damageMeteor(hit, hit.kind === 'iron' ? b.dmg * IRON_BULLET_FACTOR : b.dmg, b.x, b.y);
     }
   }
 
@@ -619,11 +657,18 @@ export function update(dt) {
     if (m.x < m.r) { m.x = m.r; m.vx = Math.abs(m.vx); }
     if (m.x > W - m.r) { m.x = W - m.r; m.vx = -Math.abs(m.vx); }
 
+    if (m.kind === 'homing') {
+      const landX = m.x + m.vx * (GROUND_Y - m.y) / m.vy;
+      m.vx = clamp(m.vx + Math.sign(p.x - landX) * 70 * dt, -110, 110);
+    }
+    if (m.kind === 'cluster' && m.y > m.burstY) { scatter(m); continue; }
+
     m.trail -= dt;
     if (m.trail <= 0) {
       m.trail = 0.045;
+      const colors = METEOR_STYLE[m.kind].trail;
       particle(m.x + rand(-m.r, m.r) * 0.5, m.y - m.r * 0.6, -m.vx * 0.2 + rand(-15, 15), -m.vy * 0.25,
-        rand(0.25, 0.5), Math.random() < 0.5 ? '#ff8a3c' : '#ffd166', m.r * rand(0.25, 0.5));
+        rand(0.25, 0.5), colors[Math.random() < 0.5 ? 0 : 1], m.r * rand(0.25, 0.5));
     }
 
     if (m.y + m.r * 0.8 >= GROUND_Y) { impact(m); continue; }
@@ -685,6 +730,7 @@ export function update(dt) {
   G.shots = G.shots.filter(s => !s.dead);
   G.rocks = G.rocks.filter(r => !r.dead);
   G.towers = G.towers.filter(t => !t.dead);
+  G.patches = G.patches.filter(q => q.life > 0);
   G.parts = G.parts.filter(q => q.life > 0);
   G.floaters = G.floaters.filter(f => f.life > 0);
 

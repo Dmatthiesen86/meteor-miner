@@ -1,13 +1,22 @@
 // DOM side of the game: HUD, tower button, and the menu / shop / pause / game-over panels.
-import { ORES, ORE_KEYS, SHOP, stageConfig } from './config.js';
-import { G, save, newProfile, cargoValue, cargoCount } from './state.js';
+import { ORES, ORE_KEYS, SHOP, PERKS, PRESTIGE_STAGE, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
+import { G, save, newProfile, cargoValue, saleValue, cargoCount } from './state.js';
 import { input } from './input.js';
 import { startStage, towerInReach } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), jumpBtn = $('jumpBtn');
-const money = n => '$' + n.toLocaleString();
+// Whole dollars below `compactFrom`, then 3 significant figures: $125K, $1.87M.
+function money(n, compactFrom = 100000) {
+  if (n < compactFrom) return '$' + Math.round(n).toLocaleString();
+  const units = ['K', 'M', 'B', 'T'];
+  let i = -1;
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
+  return '$' + (n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2)) + units[i];
+}
+// Tighter, for the top bar on a phone.
+const short = n => money(n, 10000);
 
 // Only touch the DOM when a value actually changes.
 const shown = {};
@@ -51,18 +60,27 @@ export function showMenu() {
     </div>
     ${G.hasSave ? `<button class="btn primary" id="continueBtn">Continue - Stage ${p.stage}</button>` : ''}
     <button class="btn ${G.hasSave ? '' : 'primary'}" id="newBtn">New game</button>
-    ${p.best > 1 ? `<p class="tag" style="margin-top:12px">Best stage reached: ${p.best}</p>` : ''}
+    ${p.best > 1 ? `<p class="tag" style="margin-top:12px">Best stage reached: ${p.best}${p.expeditions ? ` · Expeditions: ${p.expeditions} · Star shards: ${p.shards}` : ''}</p>` : ''}
   `);
   if (G.hasSave) on('continueBtn', showShop);
   on('newBtn', () => {
-    if (G.hasSave && !confirm('Start over? This erases your saved progress.')) return;
-    const fresh = newProfile();
-    fresh.muted = p.muted;
-    fresh.best = p.best;
-    G.profile = fresh;
+    if (G.hasSave && !confirm('Start over from stage 1? Cash and gear are erased. Star shards and perks are kept.')) return;
+    G.profile = freshRun(p);
     G.hasSave = false;
     play();
   });
+}
+
+// A stage-1 profile that keeps everything permanent from the old one.
+function freshRun(old) {
+  const fresh = newProfile();
+  fresh.muted = old.muted;
+  fresh.best = old.best;
+  fresh.shards = old.shards;
+  fresh.expeditions = old.expeditions;
+  fresh.perks = { ...old.perks };
+  fresh.money = START_CASH_PER_LEVEL * old.perks.start;
+  return fresh;
 }
 
 function cargoHtml(cargo) {
@@ -77,8 +95,10 @@ function cargoHtml(cargo) {
 export function showShop(summary) {
   G.mode = 'shop';
   const p = G.profile, up = p.up;
-  const value = cargoValue(p.cargo);
+  const value = saleValue(p.cargo);
+  const bonus = value - cargoValue(p.cargo);
   const next = stageConfig(p.stage);
+  const shards = shardsFor(p.stage);
 
   const items = SHOP.map(it => {
     if (it.group) return `<div class="shop-group">${it.group}</div>`;
@@ -86,8 +106,8 @@ export function showShop(summary) {
     const tooEarly = it.minStage && p.stage < it.minStage;
     const needs = [].concat(it.needs || []);
     const locked = tooEarly || (needs.length > 0 && !needs.some(id => up[id]));
-    const maxed = lvl >= it.max;
-    const cost = it.cost(lvl);
+    const maxed = !it.endless && lvl >= it.max;
+    const cost = priceOf(it, lvl);
     const label = maxed ? 'MAX' : locked ? 'Locked' : money(cost);
     const desc = tooEarly ? `Unlocks at stage ${it.minStage}.`
       : locked ? `Requires ${needs.map(id => SHOP.find(s => s.id === id).name.toLowerCase()).join(' or ')}.`
@@ -116,18 +136,35 @@ export function showShop(summary) {
     <div class="wallet"><span>Cash</span><span class="cash">${money(p.money)}</span></div>
     <div class="cargo-box">
       ${value > 0
-        ? `${cargoHtml(p.cargo)}<button class="btn good" id="sellBtn">Sell rocks for ${money(value)}</button>`
+        ? `${cargoHtml(p.cargo)}${bonus ? `<div class="cargo-line"><span>Rich veins bonus</span><span class="v">+${money(bonus)}</span></div>` : ''}<button class="btn good" id="sellBtn">Sell rocks for ${money(value)}</button>`
         : '<p style="margin:0">No rocks to sell.</p>'}
     </div>
     ${items}
     <button class="btn primary" id="goBtn">Start stage ${p.stage}</button>
     <p class="tag" style="margin:8px 0 0;font-size:12.5px">Map width ${next.worldW} · shower lasts ${next.duration}s${next.obstacles ? ` · ${next.obstacles} boulder${next.obstacles > 1 ? 's' : ''} to jump` : ''}</p>
+    ${next.newThreat ? `<p class="tag threat-warn">New threat: ${next.newThreat.name}. ${next.newThreat.tip}</p>` : ''}
     ${next.ufos ? `<p class="tag ufo-warn">UFO sighted! ${next.ufos > 1 ? next.ufos + ' saucers' : 'A saucer'} will shoot back this stage.</p>` : ''}
+    ${p.shards > 0 || p.expeditions > 0 ? `<button class="btn shard" id="perksBtn">Star perks · ${p.shards} shard${p.shards === 1 ? '' : 's'}</button>` : ''}
+    ${p.stage >= PRESTIGE_STAGE
+      ? `<button class="btn shard" id="prestigeBtn">New expedition · +${shards} star shards</button>
+         <p class="tag" style="margin:6px 0 0;font-size:12.5px">Restart at stage 1 without cash or gear. Shards buy permanent perks. Going deeper first earns more.</p>`
+      : `<p class="tag" style="margin:10px 0 0;font-size:12.5px">Reach stage ${PRESTIGE_STAGE} to unlock expeditions and permanent perks.</p>`}
   `);
 
+  if ($('perksBtn')) on('perksBtn', showPerks);
+  if ($('prestigeBtn')) on('prestigeBtn', () => {
+    if (!confirm(`Start a new expedition? You go back to stage 1 and lose your cash, rocks and gear. You gain ${shards} star shards.`)) return;
+    p.shards += shards;
+    p.expeditions++;
+    G.profile = freshRun(p);
+    save();
+    sfx.clear();
+    showPerks();
+  });
   if (value > 0) on('sellBtn', () => {
     p.money += value;
     for (const k of ORE_KEYS) p.cargo[k] = 0;
+    G.hasSave = true;
     save();
     sfx.sell();
     showShop(summary);
@@ -135,8 +172,8 @@ export function showShop(summary) {
   overlay.querySelectorAll('[data-buy]').forEach(btn => btn.addEventListener('click', () => {
     unlock();
     const it = SHOP.find(s => s.id === btn.dataset.buy);
-    const cost = it.cost(up[it.id]);
-    if (p.money < cost || up[it.id] >= it.max || (it.minStage && p.stage < it.minStage)) { sfx.deny(); return; }
+    const cost = priceOf(it, up[it.id]);
+    if (p.money < cost || (!it.endless && up[it.id] >= it.max) || (it.minStage && p.stage < it.minStage)) { sfx.deny(); return; }
     p.money -= cost;
     up[it.id]++;
     save();
@@ -146,6 +183,42 @@ export function showShop(summary) {
     overlay.firstElementChild.scrollTop = scroll;
   }));
   on('goBtn', play);
+}
+
+function showPerks() {
+  G.mode = 'shop';
+  const p = G.profile;
+  const rows = PERKS.map(k => {
+    const lvl = p.perks[k.id], maxed = lvl >= k.max, cost = perkCost(lvl);
+    return `
+      <div class="shop-item">
+        <div class="info">
+          <div><span class="name">${k.name}</span><span class="lvl">${lvl ? `Lv ${lvl}` : ''}</span></div>
+          <div class="desc">${k.desc}</div>
+        </div>
+        <button class="shard" data-perk="${k.id}" ${maxed || p.shards < cost ? 'disabled' : ''}>${maxed ? 'MAX' : '★ ' + cost}</button>
+      </div>`;
+  }).join('');
+  panel(`
+    <h2>Star perks</h2>
+    <p class="tag">Permanent. They carry over to every expedition.</p>
+    <div class="wallet"><span>Star shards</span><span class="cash shard-count">★ ${p.shards}</span></div>
+    ${rows}
+    <button class="btn primary" id="backBtn">Trading post</button>
+  `);
+  overlay.querySelectorAll('[data-perk]').forEach(btn => btn.addEventListener('click', () => {
+    unlock();
+    const k = PERKS.find(x => x.id === btn.dataset.perk), cost = perkCost(p.perks[k.id]);
+    if (p.shards < cost || p.perks[k.id] >= k.max) { sfx.deny(); return; }
+    p.shards -= cost;
+    p.perks[k.id]++;
+    if (k.id === 'start' && p.stage === 1) p.money += START_CASH_PER_LEVEL;   // counts for the run about to begin
+    G.hasSave = true;
+    save();
+    sfx.buy();
+    showPerks();
+  }));
+  on('backBtn', () => showShop());
 }
 
 export function togglePause() {
@@ -167,7 +240,7 @@ export function togglePause() {
 }
 
 function showGameOver() {
-  const lost = cargoValue(G.haul);
+  const lost = saleValue(G.haul);
   // Give the death a moment to land before covering the screen.
   setTimeout(() => {
     if (G.mode !== 'dead') return;
@@ -196,11 +269,13 @@ export function toggleMute() {
 export function updateHUD() {
   if (hud.hidden || !G.player) return;
   const p = G.player, prof = G.profile;
-  setText('hearts', '♥'.repeat(Math.max(0, p.hp)) + `<span class="lost">${'♥'.repeat(Math.max(0, p.maxHp - p.hp))}</span>`
-    + (p.shield > 0 ? `<span class="shield">${'◆'.repeat(p.shield)}</span>` : ''));
+  // past 5 hearts a row of icons would push the rest of the bar off a phone screen
+  setText('hearts', (p.maxHp > 5 ? `♥<span class="num"> ${Math.max(0, p.hp)}/${p.maxHp}</span>`
+    : '♥'.repeat(Math.max(0, p.hp)) + `<span class="lost">${'♥'.repeat(Math.max(0, p.maxHp - p.hp))}</span>`)
+    + (p.shield > 0 ? `<span class="shield">◆<span class="num">${p.shield}</span></span>` : ''));
   setText('stage', 'Stage ' + prof.stage);
-  setText('money', money(prof.money));
-  setText('cargo', `${cargoCount(G.haul)} rocks · ${money(cargoValue(G.haul))}`);
+  setText('money', short(prof.money));
+  setText('cargo', `${cargoCount(G.haul)} · ${short(saleValue(G.haul))}`);
   setText('muteBtn', '♪');
   $('muteBtn').classList.toggle('off', prof.muted);
   $('progress').style.width = (Math.min(1, G.time / G.cfg.duration) * 100).toFixed(1) + '%';

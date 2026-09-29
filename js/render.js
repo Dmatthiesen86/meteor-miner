@@ -1,5 +1,5 @@
 // Everything is drawn with canvas primitives, in logical units (view is H tall).
-import { H, GROUND_Y, ORES } from './config.js';
+import { H, GROUND_Y, ORES, METEOR_STYLE } from './config.js';
 import { G } from './state.js';
 import { input } from './input.js';
 import { blastRadius, magnetRadius, GUN_Y, TOWER_Y, PLAYER_H } from './game.js';
@@ -86,8 +86,9 @@ function drawMeteor(ctx, m) {
   ctx.translate(m.x, m.y);
   // heat glow on the leading edge
   const glow = ctx.createRadialGradient(0, m.r * 0.3, m.r * 0.4, 0, 0, m.r * 1.7);
-  glow.addColorStop(0, 'rgba(255, 140, 60, .55)');
-  glow.addColorStop(1, 'rgba(255, 140, 60, 0)');
+  const style = METEOR_STYLE[m.kind];
+  glow.addColorStop(0, `rgba(${style.glow}, .55)`);
+  glow.addColorStop(1, `rgba(${style.glow}, 0)`);
   ctx.fillStyle = glow;
   ctx.beginPath();
   ctx.arc(0, 0, m.r * 1.7, 0, TAU);
@@ -101,10 +102,10 @@ function drawMeteor(ctx, m) {
     i ? ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d) : ctx.moveTo(Math.cos(a) * d, Math.sin(a) * d);
   }
   ctx.closePath();
-  ctx.fillStyle = m.flash > 0 ? '#fff' : '#6b4a3a';
+  ctx.fillStyle = m.flash > 0 ? '#fff' : style.body;
   ctx.fill();
-  ctx.lineWidth = Math.max(1.5, m.r * 0.08);
-  ctx.strokeStyle = '#2c1c15';
+  ctx.lineWidth = Math.max(1.5, m.r * (m.kind === 'iron' ? 0.16 : 0.08));
+  ctx.strokeStyle = m.kind === 'iron' ? '#c9d2f2' : '#2c1c15';
   ctx.stroke();
 
   if (m.flash <= 0) {
@@ -158,6 +159,31 @@ function drawUfo(ctx, u, time) {
     ctx.fillRect(u.x - 25, u.y - 26, 50, 5);
     ctx.fillStyle = '#ff7ad9';
     ctx.fillRect(u.x - 24, u.y - 25, 48 * Math.max(0, u.hp / u.maxHp), 3);
+  }
+}
+
+// Ice and fire left behind by special meteors.
+function drawPatches(ctx, time) {
+  for (const q of G.patches) {
+    const fade = Math.min(1, q.life / 1.2);
+    if (q.kind === 'ice') {
+      ctx.fillStyle = `rgba(170, 230, 255, ${0.75 * fade})`;
+      ctx.fillRect(q.x - q.r, GROUND_Y - 1, q.r * 2, 6);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * fade})`;
+      for (let x = q.x - q.r + 8; x < q.x + q.r - 6; x += 22) ctx.fillRect(x, GROUND_Y, 9, 1.5);
+    } else {
+      ctx.fillStyle = `rgba(255, 80, 30, ${0.55 * fade})`;
+      ctx.fillRect(q.x - q.r, GROUND_Y - 1, q.r * 2, 6);
+      for (let x = q.x - q.r + 5; x < q.x + q.r; x += 11) {
+        const h = 10 + 9 * Math.abs(Math.sin(time * 9 + x));
+        ctx.fillStyle = `rgba(255, ${140 + Math.floor(80 * Math.abs(Math.sin(time * 7 + x * 2)))}, 50, ${0.85 * fade})`;
+        ctx.beginPath();
+        ctx.moveTo(x - 5, GROUND_Y);
+        ctx.lineTo(x, GROUND_Y - h);
+        ctx.lineTo(x + 5, GROUND_Y);
+        ctx.fill();
+      }
+    }
   }
 }
 
@@ -389,6 +415,7 @@ export function render(ctx, time) {
       ctx.stroke();
     }
 
+    drawPatches(ctx, time);
     for (const o of G.obstacles) drawObstacle(ctx, o);
     for (const t of G.towers) drawTower(ctx, t);
     for (const r of G.rocks) drawRock(ctx, r);
