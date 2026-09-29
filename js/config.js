@@ -45,6 +45,7 @@ export const SHOP = [
   { id: 'towerDamage', name: 'Tower damage',  desc: '+1 damage per shot for every tower.',           max: 10, cost: l => Math.round(80 * Math.pow(1.55, l)), needs: 'towers' },
   { id: 'towerRate',  name: 'Tower fire rate', desc: 'Every tower shoots 20% faster.',               max: 8,  cost: l => Math.round(90 * Math.pow(1.5, l)),  needs: 'towers' },
   { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.6, l)),  needs: 'towers' },
+  { id: 'towerShield', name: 'Tower shield',  desc: 'Towers absorb 1 blast per level. Recharges 12s after a hit.', max: 4, cost: l => Math.round(110 * Math.pow(1.7, l)), needs: 'towers' },
   { id: 'boots',      name: 'Boots',          desc: 'Run faster.',                                   max: 6,  cost: l => Math.round(40 * Math.pow(1.6, l)) },
   { id: 'magnet',     name: 'Magnet',         desc: 'Pull in rocks from further away.',              max: 6,  cost: l => Math.round(35 * Math.pow(1.6, l)) },
   { id: 'armor',      name: 'Armor',          desc: '+1 heart.',                                     max: 5,  cost: l => Math.round(80 * Math.pow(1.8, l)) },

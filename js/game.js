@@ -8,6 +8,7 @@ const GRAVITY = 900;
 const BULLET_SPEED = 640;
 const TOWER_SPACING = 30;
 const MAX_PARTS = 350;
+const TOWER_SHIELD_RECHARGE = 12;   // seconds without a hit before a tower's shield refills
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -19,7 +20,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const blastRadius = r => r * 1.5 + 14;
 export const gunStats = up => ({ dmg: 1 + up.damage, interval: 0.3 / (1 + 0.2 * up.rate) });
-export const towerStats = up => ({ dmg: 1 + up.towerDamage, interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor });
+export const towerStats = up => ({ dmg: 1 + up.towerDamage, interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor, shield: up.towerShield });
 export const magnetRadius = up => 34 + 20 * up.magnet;
 export const maxHearts = up => 3 + up.armor;
 
@@ -173,8 +174,15 @@ function impact(m) {
   if (Math.abs(G.player.x - m.x) < blast + 8) hurtPlayer();
   for (const t of G.towers) {
     if (Math.abs(t.x - m.x) < blast * 0.8) {
-      t.hp--;
       t.flash = 0.25;
+      t.recharge = TOWER_SHIELD_RECHARGE;
+      if (t.shield > 0) {
+        t.shield--;
+        burst(t.x, TOWER_Y, 12, 200, ['#8fe9ff', '#d9f8ff'], 4, 200);
+        sfx.shield();
+        continue;
+      }
+      t.hp--;
       if (t.hp <= 0) {
         t.dead = true;
         burst(t.x, TOWER_Y, 16, 200, ['#6fe3ff', '#9aa3ad', '#ffb347'], 4, 600);
@@ -222,8 +230,8 @@ function deployTower() {
     floater(near.x, TOWER_Y - 26, 'Re-aimed', '#b9f1ff');
   } else if (G.towersLeft > 0) {
     G.towersLeft--;
-    const hp = towerStats(G.profile.up).hp;
-    G.towers.push({ x: G.player.x, angle: G.aim, cd: 0.3, hp, maxHp: hp, flash: 0.2, dead: false });
+    const { hp, shield } = towerStats(G.profile.up);
+    G.towers.push({ x: G.player.x, angle: G.aim, cd: 0.3, hp, maxHp: hp, shield, maxShield: shield, recharge: 0, flash: 0.2, dead: false });
     sfx.deploy();
   } else {
     sfx.deny();
@@ -314,7 +322,16 @@ export function update(dt) {
       }
     }
   }
-  for (const t of G.towers) t.flash = Math.max(0, t.flash - dt);
+  for (const t of G.towers) {
+    t.flash = Math.max(0, t.flash - dt);
+    if (t.shield < t.maxShield) {
+      t.recharge -= dt;
+      if (t.recharge <= 0) {
+        t.shield = t.maxShield;
+        floater(t.x, TOWER_Y - 30, 'Shield up', '#8fe9ff');
+      }
+    }
+  }
 
   // bullets
   for (const b of G.bullets) {

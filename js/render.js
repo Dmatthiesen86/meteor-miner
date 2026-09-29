@@ -166,6 +166,15 @@ function drawTower(ctx, t) {
   ctx.beginPath();
   ctx.arc(0, TOWER_Y, 7, 0, TAU);
   ctx.fill();
+  if (t.shield > 0) {
+    ctx.strokeStyle = 'rgba(143, 233, 255, .6)';
+    ctx.fillStyle = 'rgba(143, 233, 255, .08)';
+    ctx.lineWidth = 1 + 0.5 * t.shield;
+    ctx.beginPath();
+    ctx.arc(0, GROUND_Y, 27, Math.PI, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
   // health pips, squeezed to fit under the tower however much armor it has
   const step = Math.min(7, 30 / t.maxHp);
   for (let i = 0; i < t.maxHp; i++) {
