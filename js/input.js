@@ -1,6 +1,6 @@
 // Touch + mouse + keyboard.
 //   Touch:    drag in the strip below the ground to run, touch the sky to aim.
-//   Desktop:  A/D or arrow keys to run, mouse to aim, T / E / Space for towers.
+//   Desktop:  A/D or arrow keys to run, Space / W / Up to jump, mouse to aim, T / E for towers.
 import { G } from './state.js';
 import { GROUND_Y } from './config.js';
 
@@ -8,7 +8,9 @@ export const input = {
   move: 0,          // -1 .. 1
   aimPoint: null,   // where the player is pointing, in logical view units
   stick: null,      // { x0, x, y } while a movement drag is active (drawn by the renderer)
+  aimHeld: false,   // a finger or mouse button is down on the sky (overrides auto-targeting)
   deploy: false,    // one-shot: place or re-aim a tower
+  jump: false,      // one-shot
 };
 
 const STICK_RANGE = 36, STICK_DEAD = 0.18;
@@ -40,6 +42,7 @@ export function initInput(canvas, handlers) {
     } else {
       aimPtr = e.pointerId;
       input.aimPoint = p;
+      input.aimHeld = true;
     }
     try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   });
@@ -65,6 +68,7 @@ export function initInput(canvas, handlers) {
       input.move = keyMove();
     } else if (e.pointerId === aimPtr) {
       aimPtr = null;
+      input.aimHeld = false;
       // A finger leaves the screen, so keep the last angle. A mouse is still hovering.
       if (e.pointerType !== 'mouse') input.aimPoint = null;
     }
@@ -78,7 +82,8 @@ export function initInput(canvas, handlers) {
     handlers.unlock();
     keys.add(e.code);
     if (movePtr === null) input.move = keyMove();
-    if (e.code === 'KeyT' || e.code === 'KeyE' || e.code === 'Space') { input.deploy = true; e.preventDefault(); }
+    if (e.code === 'KeyT' || e.code === 'KeyE') input.deploy = true;
+    else if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') { input.jump = true; e.preventDefault(); }
     else if (e.code === 'Escape' || e.code === 'KeyP') handlers.pause();
     else if (e.code === 'KeyM') handlers.mute();
   });

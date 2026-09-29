@@ -161,6 +161,30 @@ function drawUfo(ctx, u, time) {
   }
 }
 
+function drawObstacle(ctx, o) {
+  ctx.save();
+  ctx.translate(o.x, GROUND_Y);
+  const n = o.shape.length;
+  ctx.beginPath();
+  ctx.moveTo(-o.w / 2 - 3, 0);
+  for (let i = 0; i < n; i++) {
+    const a = Math.PI - (i + 0.5) / n * Math.PI;
+    ctx.lineTo(Math.cos(a) * o.w / 2 * o.shape[i], -Math.sin(a) * o.h * o.shape[i]);
+  }
+  ctx.lineTo(o.w / 2 + 3, 0);
+  ctx.closePath();
+  ctx.fillStyle = '#54486a';
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#1d1729';
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 255, 255, .13)';                        // lit top-left face
+  ctx.beginPath();
+  ctx.ellipse(-o.w * 0.14, -o.h * 0.62, o.w * 0.2, o.h * 0.16, -0.5, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawRock(ctx, r) {
   if (r.life < 3 && Math.floor(r.life * 8) % 2 === 0) return;   // blink before vanishing
   ctx.save();
@@ -221,9 +245,9 @@ function drawTower(ctx, t) {
 
 function drawPlayer(ctx, p, up) {
   if (p.inv > 0 && Math.floor(p.inv * 12) % 2 === 0) return;      // hit flicker
-  const swing = Math.sin(p.walk * TAU) * (Math.abs(p.vx) > 8 ? 6 : 0);
+  const swing = p.jy > 0 ? 5 : Math.sin(p.walk * TAU) * (Math.abs(p.vx) > 8 ? 6 : 0);
   ctx.save();
-  ctx.translate(p.x, GROUND_Y);
+  ctx.translate(p.x, GROUND_Y - p.jy);
   ctx.lineCap = 'round';
 
   ctx.strokeStyle = '#d8dcef';
@@ -254,8 +278,8 @@ function drawPlayer(ctx, p, up) {
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(p.x, GUN_Y);
-    ctx.lineTo(p.x + Math.cos(G.aim) * 16, GUN_Y + Math.sin(G.aim) * 16);
+    ctx.moveTo(p.x, GUN_Y - p.jy);
+    ctx.lineTo(p.x + Math.cos(G.aim) * 16, GUN_Y - p.jy + Math.sin(G.aim) * 16);
     ctx.stroke();
   }
 }
@@ -265,8 +289,8 @@ function drawAimLine(ctx, p) {
   ctx.lineWidth = 1.5;
   ctx.setLineDash([3, 7]);
   ctx.beginPath();
-  ctx.moveTo(p.x + Math.cos(G.aim) * 20, GUN_Y + Math.sin(G.aim) * 20);
-  ctx.lineTo(p.x + Math.cos(G.aim) * 110, GUN_Y + Math.sin(G.aim) * 110);
+  ctx.moveTo(p.x + Math.cos(G.aim) * 20, GUN_Y - p.jy + Math.sin(G.aim) * 20);
+  ctx.lineTo(p.x + Math.cos(G.aim) * 110, GUN_Y - p.jy + Math.sin(G.aim) * 110);
   ctx.stroke();
   ctx.setLineDash([]);
 }
@@ -310,6 +334,7 @@ function drawControls(ctx, vw) {
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, .35)';
     ctx.fillText('or use A / D  ·  touch the sky to aim', vw / 2, GROUND_Y + 80);
+    if (G.obstacles.length) ctx.fillText('Jump button or Space to hop boulders', vw / 2, GROUND_Y + 100);
   }
 }
 
@@ -324,6 +349,8 @@ function drawMinimap(ctx, vw, camX) {
   ctx.lineWidth = 1;
   ctx.strokeRect(x0 + camX * k, y - 2, vw * k, 9);
   for (const r of G.rocks) { ctx.fillStyle = ORES[r.ore].color; ctx.fillRect(x0 + r.x * k - 1, y + 3, 2, 2); }
+  ctx.fillStyle = '#9a8fb5';
+  for (const o of G.obstacles) ctx.fillRect(x0 + o.x * k - 1.5, y - 1, 3, 7);
   ctx.fillStyle = '#8fe9ff';
   for (const t of G.towers) ctx.fillRect(x0 + t.x * k - 1.5, y, 3, 5);
   ctx.fillStyle = '#ff6b5e';
@@ -362,6 +389,7 @@ export function render(ctx, time) {
       ctx.stroke();
     }
 
+    for (const o of G.obstacles) drawObstacle(ctx, o);
     for (const t of G.towers) drawTower(ctx, t);
     for (const r of G.rocks) drawRock(ctx, r);
     if (G.mode !== 'dead' && p.shield > 0) {
@@ -370,7 +398,7 @@ export function render(ctx, time) {
       ctx.fillStyle = 'rgba(143, 233, 255, .08)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.ellipse(p.x, GROUND_Y - 19, 17, 25, 0, 0, TAU);
+      ctx.ellipse(p.x, GROUND_Y - 19 - p.jy, 17, 25, 0, 0, TAU);
       ctx.fill();
       ctx.stroke();
     }
@@ -419,7 +447,7 @@ export function render(ctx, time) {
     drawMinimap(ctx, vw, camX);
     if (G.banner) {
       ctx.globalAlpha = Math.min(1, G.banner.life) * (0.6 + 0.4 * Math.sin(time * 14));
-      ctx.fillStyle = '#ff7ad9';
+      ctx.fillStyle = G.banner.color;
       ctx.font = '800 24px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(G.banner.text, vw / 2, 110);

@@ -6,7 +6,7 @@ import { startStage, towerInReach } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
 
 const $ = id => document.getElementById(id);
-const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn');
+const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), jumpBtn = $('jumpBtn');
 const money = n => '$' + n.toLocaleString();
 
 // Only touch the DOM when a value actually changes.
@@ -20,6 +20,7 @@ function panel(html) {
   overlay.hidden = false;
   hud.hidden = true;
   towerBtn.hidden = true;
+  jumpBtn.hidden = true;
 }
 
 function on(id, fn) {
@@ -42,6 +43,7 @@ export function showMenu() {
     <p class="tag">Dodge the meteors. Grab the rocks. Sell. Gear up.</p>
     <div class="how">
       <b>Run</b> - drag along the bottom strip, or A / D / arrow keys.<br>
+      <b>Jump</b> - Jump button, or Space / W. Bigger maps have boulders to hop over.<br>
       <b>Aim</b> - touch the sky or move the mouse. Your blaster fires on its own.<br>
       <b>Towers</b> - aim, then tap the tower button (or T) to plant one. Stand on it and tap again to re-aim.<br>
       <b>UFOs</b> show up every 5th stage and shoot back. Shoot them down for crystals.<br>
@@ -118,7 +120,7 @@ export function showShop(summary) {
     </div>
     ${items}
     <button class="btn primary" id="goBtn">Start stage ${p.stage}</button>
-    <p class="tag" style="margin:8px 0 0;font-size:12.5px">Map width ${next.worldW} · shower lasts ${next.duration}s</p>
+    <p class="tag" style="margin:8px 0 0;font-size:12.5px">Map width ${next.worldW} · shower lasts ${next.duration}s${next.obstacles ? ` · ${next.obstacles} boulder${next.obstacles > 1 ? 's' : ''} to jump` : ''}</p>
     ${next.ufos ? `<p class="tag ufo-warn">UFO sighted! ${next.ufos > 1 ? next.ufos + ' saucers' : 'A saucer'} will shoot back this stage.</p>` : ''}
   `);
 
@@ -202,6 +204,7 @@ export function updateHUD() {
   $('muteBtn').classList.toggle('off', prof.muted);
   $('progress').style.width = (Math.min(1, G.time / G.cfg.duration) * 100).toFixed(1) + '%';
 
+  jumpBtn.hidden = G.obstacles.length === 0;
   const hasTowers = prof.up.towers > 0;
   towerBtn.hidden = !hasTowers;
   if (hasTowers) {
@@ -221,6 +224,11 @@ export function initUI() {
     e.preventDefault();
     unlock();
     input.deploy = true;
+  });
+  jumpBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    unlock();
+    input.jump = true;
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && G.mode === 'playing') togglePause();

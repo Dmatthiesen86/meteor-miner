@@ -66,6 +66,7 @@ export const sfx = {
   alarm:  () => { [0, 0.3, 0.6].forEach(d => tone(440, 0.22, { type: 'sawtooth', vol: 0.12, to: 880, delay: d })); },
   ufoShot: () => tone(1200, 0.18, { type: 'sawtooth', vol: 0.07, to: 300 }),
   rocket: () => { noise(0.3, 0.12, 1800); tone(180, 0.3, { type: 'sawtooth', vol: 0.06, to: 420 }); },
+  jump:   () => tone(260, 0.14, { type: 'square', vol: 0.07, to: 520 }),
   buy:    () => { tone(660, 0.08, { type: 'triangle', vol: 0.15 }); tone(990, 0.12, { type: 'triangle', vol: 0.15, delay: 0.08 }); },
   sell:   () => { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.1, { type: 'triangle', vol: 0.13, delay: i * 0.06 })); },
   deny:   () => tone(160, 0.15, { type: 'square', vol: 0.1, to: 110 }),

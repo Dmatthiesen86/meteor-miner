@@ -15,6 +15,8 @@ const ROCKET_TURN = 5;               // rad/s a homing rocket can steer
 const HOMING_RANGE = 420;
 const UFO_R = 20, UFO_SHOT_SPEED = 230;
 const UFO_LINGER = 15;               // seconds after the shower before UFOs give up and leave
+const JUMP_SPEED = 430, JUMP_GRAVITY = 1400;   // one fixed jump, ~66 high: clears every boulder
+const GUN_TURN = 8;                  // rad/s the auto-targeting blaster swings
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -36,14 +38,15 @@ export function startStage() {
   const p = G.profile, cfg = stageConfig(p.stage);
   G.cfg = cfg;
   G.worldW = cfg.worldW;
-  G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1 };
+  G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1, jy: 0, vjump: 0 };
   G.meteors = []; G.ufos = []; G.shots = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = [];
+  G.obstacles = makeObstacles(cfg);
   G.towersLeft = p.up.towers;
   G.haul = emptyCargo();
   G.stats = { destroyed: 0, landed: 0, ufos: 0 };
   G.ufosToSpawn = cfg.ufos;
   G.nextUfoT = cfg.duration * 0.25;
-  G.banner = null;
+  G.banner = cfg.obstacles && cfg.n <= 4 ? { text: 'JUMP THE BOULDERS', life: 3.5, color: '#ffd166' } : null;
   G.time = 0;
   G.spawnT = 1.2;
   G.gunT = 0;
@@ -51,9 +54,26 @@ export function startStage() {
   G.shake = 0;
   G.aim = -Math.PI / 2;
   input.deploy = false;
+  input.jump = false;
   G.mode = 'playing';
   updateCamera();
 }
+
+// Boulders spread along the map, kept clear of the spot where the miner starts.
+function makeObstacles(cfg) {
+  const W = cfg.worldW, list = [];
+  for (let i = 0; i < cfg.obstacles; i++) {
+    let x = W * (i + 0.5) / cfg.obstacles + rand(-40, 40);
+    if (Math.abs(x - W / 2) < 70) x += x < W / 2 ? -90 : 90;
+    list.push({
+      x: clamp(x, 70, W - 70), w: rand(26, 36), h: rand(22, 34),
+      shape: Array.from({ length: 7 }, () => rand(0.8, 1.05)),
+    });
+  }
+  return list;
+}
+
+const obstacleAt = (x, pad) => G.obstacles.find(o => Math.abs(x - o.x) < o.w / 2 + pad) || null;
 
 export function updateCamera() {
   const v = G.view, W = G.worldW;
@@ -117,7 +137,7 @@ function spawnUfo() {
     hp: G.cfg.ufoHp, maxHp: G.cfg.ufoHp, cd: rand(2, 3), phase: rand(0, 6),
     flash: 0, leaving: false, dead: false,
   });
-  G.banner = { text: 'UFO INCOMING', life: 2.5 };
+  G.banner = { text: 'UFO INCOMING', life: 2.5, color: '#ff7ad9' };
   sfx.alarm();
 }
 
@@ -309,26 +329,26 @@ function explode(b) {
   }
 }
 
-// Angle that leads a tower's target, or null if the sky is clear. A meteor about to land
-// on the tower comes first (lowest one wins); otherwise it takes the nearest threat.
-function targetAngle(t) {
+// Angle that leads the target for a gun at (x, y), or null if the sky is clear. A meteor
+// about to land on the gun comes first (lowest one wins); otherwise the nearest threat.
+function targetAngle(x, y) {
   let best = null, bestD = Infinity, danger = null;
   for (const m of G.meteors) {
     if (m.dead || m.y < 0 || m.y > GROUND_Y - 30) continue;
     const landX = m.x + m.vx * (GROUND_Y - m.y) / m.vy;
-    if (Math.abs(landX - t.x) < blastRadius(m.r) * 0.8 + 10 && (!danger || m.y > danger.y)) danger = m;
-    const d = Math.hypot(m.x - t.x, m.y - TOWER_Y);
+    if (Math.abs(landX - x) < blastRadius(m.r) * 0.8 + 10 && (!danger || m.y > danger.y)) danger = m;
+    const d = Math.hypot(m.x - x, m.y - y);
     if (d < bestD) { bestD = d; best = m; }
   }
   for (const u of G.ufos) {
     if (u.dead || u.leaving || u.y < 0) continue;
-    const d = Math.hypot(u.x - t.x, u.y - TOWER_Y);
+    const d = Math.hypot(u.x - x, u.y - y);
     if (d < bestD) { bestD = d; best = u; }
   }
-  if (danger) { best = danger; bestD = Math.hypot(danger.x - t.x, danger.y - TOWER_Y); }
+  if (danger) { best = danger; bestD = Math.hypot(danger.x - x, danger.y - y); }
   if (!best) return null;
   const lead = bestD / BULLET_SPEED;
-  return clampAim(Math.atan2(best.y + (best.vy || 0) * lead - TOWER_Y, best.x + best.vx * lead - t.x));
+  return clampAim(Math.atan2(best.y + (best.vy || 0) * lead - y, best.x + best.vx * lead - x));
 }
 
 function deployTower() {
@@ -341,6 +361,9 @@ function deployTower() {
     near.flash = 0.2;
     sfx.deploy();
     floater(near.x, TOWER_Y - 26, 'Re-aimed', '#b9f1ff');
+  } else if (G.towersLeft > 0 && obstacleAt(G.player.x, 14)) {
+    sfx.deny();
+    floater(G.player.x, TOWER_Y - 26, 'No room here', '#ff6b5e');
   } else if (G.towersLeft > 0) {
     G.towersLeft--;
     const { hp, shield } = towerStats(G.profile.up);
@@ -390,7 +413,27 @@ export function update(dt) {
   // player
   const speed = 170 + 26 * up.boots;
   p.vx += (input.move * speed - p.vx) * Math.min(1, dt * 14);
+  const fromX = p.x;
   p.x = clamp(p.x + p.vx * dt, 10, W - 10);
+
+  if (input.jump) {
+    input.jump = false;
+    if (p.jy === 0 && !clearing) { p.vjump = JUMP_SPEED; sfx.jump(); }
+  }
+  if (p.vjump !== 0 || p.jy > 0) {
+    p.jy += p.vjump * dt;
+    p.vjump -= JUMP_GRAVITY * dt;
+    if (p.jy <= 0) { p.jy = 0; p.vjump = 0; }
+  }
+  // boulders block the way unless the miner is above them
+  for (const o of G.obstacles) {
+    const half = o.w / 2 + 8;
+    if (p.jy < o.h && Math.abs(p.x - o.x) < half) {
+      p.x = o.x + (fromX < o.x ? -half : half);
+      p.vx = 0;
+    }
+  }
+  const gunY = GUN_Y - p.jy;
   if (Math.abs(p.vx) > 8) {
     p.walk += Math.abs(p.vx) * dt * 0.09;
     p.face = Math.sign(p.vx);
@@ -399,8 +442,11 @@ export function update(dt) {
   p.inv = Math.max(0, p.inv - dt);
   updateCamera();
 
-  if (input.aimPoint) {
-    G.aim = clampAim(Math.atan2(input.aimPoint.y - GUN_Y, input.aimPoint.x + G.view.camX - p.x));
+  if (up.gunAuto && !input.aimHeld) {
+    const want = targetAngle(p.x, gunY);
+    if (want !== null) G.aim += clamp(want - G.aim, -GUN_TURN * dt, GUN_TURN * dt);
+  } else if (input.aimPoint) {
+    G.aim = clampAim(Math.atan2(input.aimPoint.y - gunY, input.aimPoint.x + G.view.camX - p.x));
   }
   if (input.deploy) {
     input.deploy = false;
@@ -450,7 +496,7 @@ export function update(dt) {
     if (s.y >= GROUND_Y) {
       s.dead = true;
       burst(s.x, GROUND_Y, 6, 120, ['#ff7ad9', '#ffe9a8'], 3, 400, true);
-    } else if (p.inv <= 0 && !clearing && Math.abs(s.x - p.x) < 10 && s.y > GROUND_Y - PLAYER_H) {
+    } else if (p.inv <= 0 && !clearing && Math.abs(s.x - p.x) < 10 && s.y > GROUND_Y - PLAYER_H - p.jy && s.y < GROUND_Y - p.jy) {
       s.dead = true;
       hurtPlayer();
     } else {
@@ -467,14 +513,14 @@ export function update(dt) {
       if (G.gunT <= 0) {
         const g = gunStats(up);
         G.gunT = g.interval;
-        fire(p.x + Math.cos(G.aim) * 16, GUN_Y + Math.sin(G.aim) * 16, G.aim, g.dmg, '#ffe9a8');
+        fire(p.x + Math.cos(G.aim) * 16, gunY + Math.sin(G.aim) * 16, G.aim, g.dmg, '#ffe9a8');
         sfx.shoot();
       }
       if (up.gunRockets) {
         G.gunRocketT -= dt;
         if (G.gunRocketT <= 0) {
           G.gunRocketT = GUN_ROCKET_INTERVAL;
-          fireRocket(p.x + Math.cos(G.aim) * 16, GUN_Y + Math.sin(G.aim) * 16, G.aim, gunRocketStats(up), !!up.homing);
+          fireRocket(p.x + Math.cos(G.aim) * 16, gunY + Math.sin(G.aim) * 16, G.aim, gunRocketStats(up), !!up.homing);
           sfx.rocket();
         }
       }
@@ -484,7 +530,7 @@ export function update(dt) {
   for (const t of G.towers) {
     let armed = hostile;
     if (up.autoTarget) {
-      const want = targetAngle(t);
+      const want = targetAngle(t.x, TOWER_Y);
       if (want === null) armed = false;
       else {
         t.angle += clamp(want - t.angle, -TOWER_TURN * dt, TOWER_TURN * dt);
@@ -579,7 +625,7 @@ export function update(dt) {
 
     // direct hit on the player (circle vs. the player's box)
     if (p.inv <= 0 && !clearing) {
-      const cx = clamp(m.x, p.x - 8, p.x + 8), cy = clamp(m.y, GROUND_Y - PLAYER_H, GROUND_Y);
+      const cx = clamp(m.x, p.x - 8, p.x + 8), cy = clamp(m.y, GROUND_Y - PLAYER_H - p.jy, GROUND_Y - p.jy);
       const dx = m.x - cx, dy = m.y - cy;
       if (dx * dx + dy * dy < m.r * m.r * 0.85) impact(m);
     }
@@ -590,7 +636,7 @@ export function update(dt) {
   const pull = clearing ? 900 : 420;
   for (const r of G.rocks) {
     if (r.dead) continue;
-    const dx = p.x - r.x, dy = GROUND_Y - 18 - r.y;
+    const dx = p.x - r.x, dy = GROUND_Y - 18 - p.jy - r.y;
     const d = Math.hypot(dx, dy);
     if (d < 18) { collect(r); continue; }
     if (d < reach) {
@@ -607,6 +653,8 @@ export function update(dt) {
       r.spin += r.vx * dt * 0.05;
       if (r.y >= GROUND_Y - 5) {
         r.y = GROUND_Y - 5;
+        const o = obstacleAt(r.x, 4);             // never leave loot buried inside a boulder
+        if (o) r.x = o.x + (r.x < o.x ? -1 : 1) * (o.w / 2 + 6);
         if (Math.abs(r.vy) > 90) { r.vy *= -0.35; r.vx *= 0.6; }
         else { r.vy = 0; r.vx = 0; r.resting = true; }
       }

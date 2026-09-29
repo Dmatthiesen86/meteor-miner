@@ -26,6 +26,8 @@ export function stageConfig(n) {
     minR: 9,
     maxR: Math.min(23 + 5 * n, 72),
     hpMul: 1 + 0.3 * (n - 1),
+    // Boulders the miner has to jump; none on the first small maps.
+    obstacles: Math.max(0, Math.floor((worldW - 360) / 240)),
     // Every 5th stage UFOs join the shower and shoot back.
     ufos: n % 5 === 0 ? Math.min(3, n / 5) : 0,
     ufoHp: Math.round(30 * (1 + 0.3 * (n - 1))),
@@ -51,6 +53,7 @@ export const SHOP = [
   { id: 'gun',        name: 'Blaster',        desc: 'Auto-fires wherever you point.',                max: 1,  cost: () => 50 },
   { id: 'damage',     name: 'Blaster damage', desc: '+1 damage per shot.',                           max: 10, cost: l => Math.round(60 * Math.pow(1.55, l)), needs: 'gun' },
   { id: 'rate',       name: 'Fire rate',      desc: 'Blaster shoots 20% faster.',                    max: 8,  cost: l => Math.round(70 * Math.pow(1.5, l)),  needs: 'gun' },
+  { id: 'gunAuto',    name: 'Blaster auto-targeting', desc: 'Blaster tracks the nearest threat by itself. Touch the sky to take over.', max: 1, cost: () => 800, needs: 'gun', minStage: 6 },
   { id: 'gunRockets', name: 'Blaster rockets', desc: 'Blaster also fires an exploding rocket every 2.5s. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(600 * Math.pow(1.6, l)), needs: 'gun', minStage: 6 },
 
   { group: 'Towers' },

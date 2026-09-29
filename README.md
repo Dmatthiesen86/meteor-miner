@@ -35,7 +35,8 @@ python -m http.server 5174
 |---|---|---|
 | Run | drag in the strip below the ground | A / D or arrow keys |
 | Aim | touch the sky (aim stays where you left it) | mouse |
-| Place / re-aim tower | tower button | T, E or Space |
+| Jump | Jump button | Space, W or up arrow |
+| Place / re-aim tower | tower button | T or E |
 | Pause / mute | buttons top right | P or Esc / M |
 
 The blaster and towers fire on their own whenever meteors are in the sky.
@@ -50,6 +51,10 @@ The blaster and towers fire on their own whenever meteors are in the sky.
 - A shield soaks up one hit per level before you lose hearts, and recharges every stage.
 - Towers take 3 blasts (more with tower armor). A tower shield soaks up blasts first and
   refills 12 s after the last hit. A destroyed tower is gone; surviving towers come back next stage.
+- **Boulders** appear from stage 3 (one more every two stages). They block the way; one jump
+  clears any of them. Towers can't be planted on a boulder.
+- **Blaster auto-targeting** (from stage 6) aims the blaster for you. Touching the sky, or
+  holding the mouse button, takes manual control while held.
 - With tower repair, damaged towers mend 1 health every few seconds (the timer restarts when hit).
 - **UFOs** arrive on every 5th stage (one on stage 5, two on 10, three from 15). They hover over
   you and fire at you and your towers. Shoot them down for crystals and gold; if you can't,
