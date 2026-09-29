@@ -1,6 +1,6 @@
 // Touch + mouse + keyboard.
 //   Touch:    drag in the strip below the ground to run, touch the sky to aim.
-//   Desktop:  A/D or arrow keys to run, Space / W / Up to jump, mouse to aim, T / E for towers.
+//   Desktop:  A/D or arrow keys to run, Space / W / Up to jump, mouse to aim, T / E for towers, 1 / 2 / 3 for supplies.
 import { G } from './state.js';
 import { GROUND_Y } from './config.js';
 
@@ -11,6 +11,7 @@ export const input = {
   aimHeld: false,   // a finger or mouse button is down on the sky (overrides auto-targeting)
   deploy: false,    // one-shot: place or re-aim a tower
   jump: false,      // one-shot
+  use: null,        // one-shot: id of a supply item to fire
 };
 
 const STICK_RANGE = 36, STICK_DEAD = 0.18;
@@ -84,6 +85,9 @@ export function initInput(canvas, handlers) {
     if (movePtr === null) input.move = keyMove();
     if (e.code === 'KeyT' || e.code === 'KeyE') input.deploy = true;
     else if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') { input.jump = true; e.preventDefault(); }
+    else if (e.code === 'Digit1') input.use = 'nuke';
+    else if (e.code === 'Digit2') input.use = 'slow';
+    else if (e.code === 'Digit3') input.use = 'cell';
     else if (e.code === 'Escape' || e.code === 'KeyP') handlers.pause();
     else if (e.code === 'KeyM') handlers.mute();
   });

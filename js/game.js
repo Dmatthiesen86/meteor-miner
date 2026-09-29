@@ -1,6 +1,6 @@
 // The simulation: player, meteors, rocks, bullets, towers and stage flow.
-import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, BOONS, BOON_EVERY, stageConfig, pickKind, bestOre } from './config.js';
-import { G, save, emptyCargo, boon } from './state.js';
+import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, BOONS, BOON_EVERY, MISSIONS, MISSION_SLOTS, stageConfig, pickKind, bestOre, missionReward } from './config.js';
+import { G, save, emptyCargo, cargoCount, boon } from './state.js';
 import { input } from './input.js';
 import { sfx } from './audio.js';
 
@@ -23,6 +23,8 @@ const ICE_LIFE = 7, FIRE_LIFE = 5;
 const BOSS_R = 48, BOSS_LINGER = 45;  // mothership hit size; seconds after the shower before it escapes
 const TITAN_R = 95;
 const TWIN_SPREAD = 0.11;            // radians between Twin shot bullets
+const SLOW_SECONDS = 6, SLOW_FACTOR = 0.35;
+const NUKE_BOSS_SHARE = 0.2, NUKE_UFO_SHARE = 0.5;   // share of full health a nuke takes off
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -43,7 +45,7 @@ export const magnetRadius = up => 34 + 20 * up.magnet + 40 * boon('pull');
 export const maxHearts = up => 3 + up.armor + boon('heart');
 
 export function startStage() {
-  const p = G.profile, cfg = stageConfig(p.stage);
+  const p = G.profile, cfg = stageConfig(p.stage, p.expeditions);
   G.cfg = cfg;
   G.worldW = cfg.worldW;
   G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1, jy: 0, vjump: 0 };
@@ -52,13 +54,16 @@ export function startStage() {
   G.towersLeft = p.up.towers;
   G.towersStart = p.up.towers;
   G.haul = emptyCargo();
-  G.stats = { destroyed: 0, landed: 0, ufos: 0, boss: false };
+  G.stats = { destroyed: 0, landed: 0, ufos: 0, boss: false, golden: 0, hurt: false };
+  G.slowT = 0;
+  G.flashT = 0;
   G.ufosToSpawn = cfg.ufos;
   G.nextUfoT = cfg.duration * 0.25;
   G.bossPending = !!cfg.boss;
   G.boss = null;
   G.wind = 0;
   G.banner = cfg.newPlanet ? { text: 'WELCOME TO ' + cfg.planet.name.toUpperCase(), life: 4, color: '#8fe9ff' }
+    : cfg.event ? { text: cfg.event.name.toUpperCase(), life: 4, color: '#6fe39a' }
     : cfg.newThreat ? { text: 'NEW: ' + cfg.newThreat.name.toUpperCase(), life: 4, color: '#ffd166' }
     : cfg.obstacles && cfg.n <= 4 ? { text: 'JUMP THE BOULDERS', life: 3.5, color: '#ffd166' } : null;
   G.time = 0;
@@ -69,6 +74,7 @@ export function startStage() {
   G.aim = -Math.PI / 2;
   input.deploy = false;
   input.jump = false;
+  input.use = null;
   G.mode = 'playing';
   updateCamera();
 }
@@ -225,6 +231,7 @@ function floater(x, y, text, color) {
 }
 
 function dropRocks(m, count, onGround) {
+  count *= G.cfg.rockMul;
   for (let i = 0; i < count; i++) {
     // Mostly the meteor's own ore, with some plain stone mixed in.
     const ore = m.kind === 'golden' || Math.random() < 0.7 ? m.ore : 'stone';
@@ -253,6 +260,7 @@ function hurtPlayer() {
     return;
   }
   p.hp--;
+  G.stats.hurt = true;
   p.inv = 1.4;
   G.shake = Math.max(G.shake, 14);
   burst(p.x, GROUND_Y - 20, 14, 220, ['#ff6b5e', '#ffd166'], 4, 500);
@@ -279,6 +287,7 @@ function impact(m) {
   if (m.kind === 'titan') G.banner = { text: 'THE TITAN LANDED', life: 3, color: '#ff6b5e' };
   else if (m.kind === 'golden') floater(m.x, GROUND_Y - 30, 'Jackpot lost', '#ffd166');
   else dropRocks(m, Math.max(1, Math.round(m.r / 9)) * (m.kind === 'iron' ? 2 : 1), true);
+  if (G.cfg.harmless) return;
   if (m.kind === 'ice') G.patches.push({ kind: 'ice', x: m.x, r: blast, life: ICE_LIFE, max: ICE_LIFE });
   if (m.kind === 'fire') {
     const life = FIRE_LIFE * G.cfg.planet.fireMul;
@@ -326,6 +335,7 @@ function shatter(m) {
       G.meteors.push(makeMeteor(m.x + rand(-60, 60), m.y + rand(-40, 40), rand(-130, 130), rand(60, 120), rand(20, 30), m.ore));
     }
   } else if (m.kind === 'golden') {
+    G.stats.golden++;
     G.shake = Math.max(G.shake, 8);
     floater(m.x, m.y - 20, 'JACKPOT!', '#ffd166');
     for (let i = 0; i < 10; i++) dropRocks({ ...m, r: 30 }, 1, false);
@@ -449,6 +459,68 @@ function targetAngle(x, y) {
   return clampAim(Math.atan2(best.y + (best.vy || 0) * lead - y, best.x + best.vx * lead - x));
 }
 
+function useItem(id) {
+  const items = G.profile.items, p = G.player;
+  if (!items[id] || G.mode !== 'playing') { sfx.deny(); return; }
+  items[id]--;
+  if (id === 'nuke') {
+    G.flashT = 0.5;
+    G.shake = Math.max(G.shake, 20);
+    sfx.impact(80);
+    G.shots = [];
+    const n = G.meteors.length;
+    for (let i = 0; i < n; i++) {
+      const m = G.meteors[i];
+      if (m.dead) continue;
+      if (m.kind === 'titan') { damageMeteor(m, m.maxHp * NUKE_BOSS_SHARE, m.x, m.y); continue; }
+      // vaporised whole: full air yield, no pieces left to fall
+      m.dead = true;
+      G.stats.destroyed++;
+      if (m.kind === 'golden') G.stats.golden++;
+      burst(m.x, m.y, 8, 200, ['#fff', '#ffe9a8', ORES[m.ore].color], 4, 300);
+      dropRocks(m, m.kind === 'golden' ? 10 : Math.max(1, Math.round(m.r / 9 * 1.5)), false);
+    }
+    for (const u of G.ufos) if (!u.dead) damageUfo(u, u.maxHp * (u.boss ? NUKE_BOSS_SHARE : NUKE_UFO_SHARE), u.x, u.y);
+    G.banner = { text: 'NUKE', life: 1.5, color: '#fff' };
+  } else if (id === 'slow') {
+    G.slowT = SLOW_SECONDS;
+    sfx.shield();
+    G.banner = { text: 'TIME SLOW', life: 1.5, color: '#8fe9ff' };
+  } else if (id === 'cell') {
+    p.shield += 2;
+    sfx.shield();
+    floater(p.x, GROUND_Y - PLAYER_H - 14 - p.jy, '+2 shield', '#8fe9ff');
+  }
+}
+
+/** Tops the mission list back up to three, never repeating a type already active. */
+export function fillMissions(p) {
+  while (p.missions.length < MISSION_SLOTS) {
+    const open = Object.keys(MISSIONS).filter(t => (MISSIONS[t].from || 1) <= p.stage && !p.missions.some(m => m.type === t));
+    if (!open.length) break;
+    const type = open[Math.floor(Math.random() * open.length)];
+    p.missions.push({ type, goal: MISSIONS[type].goal(p.stage), progress: 0, reward: missionReward(type, p.stage) });
+  }
+}
+
+// Feeds the cleared stage's numbers into the missions and pays out the finished ones.
+function scoreMissions(p, bossBeaten) {
+  const got = {
+    destroyed: G.stats.destroyed, rocks: cargoCount(G.haul), stages: 1, unhurt: G.stats.hurt ? 0 : 1,
+    golden: G.stats.golden, ufos: G.stats.ufos, boss: bossBeaten ? 1 : 0,
+  };
+  const done = [];
+  for (const m of p.missions) {
+    m.progress = Math.min(m.goal, m.progress + got[MISSIONS[m.type].stat]);
+    if (m.progress >= m.goal) {
+      p.money += m.reward;
+      done.push({ text: MISSIONS[m.type].text(m.goal), reward: m.reward });
+    }
+  }
+  p.missions = p.missions.filter(m => m.progress < m.goal);
+  return done;
+}
+
 function deployTower() {
   const near = towerInReach();
   if (near && G.profile.up.autoTarget) {
@@ -499,11 +571,13 @@ function finishStage() {
   const bossBeaten = G.stats.boss;
   if (bossBeaten) p.shards++;                         // paid on clearing, so dying can't farm it
   if (p.stage % BOON_EVERY === 0) p.pendingBoon = offerBoons(p);
+  const missions = scoreMissions(p, bossBeaten);
   const summary = {
     stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos,
-    hp: G.player.hp, lost, replaced, boss: G.cfg.boss ? { name: G.cfg.boss.name, beaten: bossBeaten } : null,
+    hp: G.player.hp, lost, replaced, missions, event: G.cfg.event, boss: G.cfg.boss ? { name: G.cfg.boss.name, beaten: bossBeaten } : null,
   };
   p.stage++;
+  fillMissions(p);
   p.best = Math.max(p.best, p.stage);
   G.hasSave = true;
   save();
@@ -518,6 +592,10 @@ export function update(dt) {
   const clearing = G.mode === 'clearing';
   G.time += dt;
   G.shake = Math.max(0, G.shake - dt * 40);
+  G.slowT = Math.max(0, G.slowT - dt);
+  G.flashT = Math.max(0, G.flashT - dt);
+  // Time slow only touches the sky: the miner, bullets and rocks keep their normal pace.
+  const wdt = G.slowT > 0 ? dt * SLOW_FACTOR : dt;
 
   // player
   const planet = cfg.planet;
@@ -569,10 +647,15 @@ export function update(dt) {
     input.deploy = false;
     if (!clearing) deployTower();
   }
+  if (input.use) {
+    const id = input.use;
+    input.use = null;
+    useItem(id);
+  }
 
   // meteor spawning ramps up over the stage
   if (!clearing && G.time < cfg.duration) {
-    G.spawnT -= dt;
+    G.spawnT -= wdt;
     if (G.spawnT <= 0) {
       spawnMeteor();
       const ramp = 1.3 - 0.5 * (G.time / cfg.duration);
@@ -598,21 +681,21 @@ export function update(dt) {
     spawnUfo();
   }
   for (const u of G.ufos) {
-    u.flash = Math.max(0, u.flash - dt);
+    u.flash = Math.max(0, u.flash - wdt);
     if (G.time > cfg.duration + (u.boss ? BOSS_LINGER : UFO_LINGER) && !u.leaving) {
       u.leaving = true;
       if (u.boss) G.banner = { text: 'THE MOTHERSHIP ESCAPED', life: 3, color: '#ff6b5e' };
     }
     if (u.leaving) {
-      u.y -= 170 * dt;
+      u.y -= 170 * wdt;
       if (u.y < -80) u.dead = true;
       continue;
     }
-    u.y += (u.homeY + Math.sin(G.time * 2 + u.phase) * 6 - u.y) * Math.min(1, dt * 1.5);
+    u.y += (u.homeY + Math.sin(G.time * 2 + u.phase) * 6 - u.y) * Math.min(1, wdt * 1.5);
     const want = clamp(p.x + Math.sin(G.time * 0.6 + u.phase) * 150, 30, W - 30);
-    u.vx += (clamp((want - u.x) * 1.5, -u.speed, u.speed) - u.vx) * Math.min(1, dt * 3);
-    u.x += u.vx * dt;
-    u.cd -= dt;
+    u.vx += (clamp((want - u.x) * 1.5, -u.speed, u.speed) - u.vx) * Math.min(1, wdt * 3);
+    u.x += u.vx * wdt;
+    u.cd -= wdt;
     if (u.cd <= 0 && u.x > 0 && u.x < W && !clearing) {
       u.cd = u.boss ? rand(1.3, 1.9) : rand(1.5, 2.4);
       const t = G.towers.length && Math.random() < 0.35 ? G.towers[Math.floor(Math.random() * G.towers.length)] : null;
@@ -622,7 +705,7 @@ export function update(dt) {
       }
       sfx.ufoShot();
     }
-    if (u.boss && !clearing && u.x > 0 && u.x < W && (u.bombT -= dt) <= 0) {
+    if (u.boss && !clearing && u.x > 0 && u.x < W && (u.bombT -= wdt) <= 0) {
       u.bombT = 5;
       for (const dir of [-1, 1]) {
         G.meteors.push(makeMeteor(clamp(u.x + dir * 40, 30, W - 30), u.y + 20, dir * rand(20, 70), cfg.speedMin, rand(15, 22), pickOre(cfg.oreWeights)));
@@ -630,8 +713,8 @@ export function update(dt) {
     }
   }
   for (const s of G.shots) {
-    s.x += s.vx * dt;
-    s.y += s.vy * dt;
+    s.x += s.vx * wdt;
+    s.y += s.vy * wdt;
     if (s.y >= GROUND_Y) {
       s.dead = true;
       burst(s.x, GROUND_Y, 6, 120, ['#ff7ad9', '#ffe9a8'], 3, 400, true);
@@ -752,21 +835,21 @@ export function update(dt) {
   for (let i = 0; i < count; i++) {
     const m = G.meteors[i];
     if (m.dead) continue;
-    m.x += m.vx * dt;
-    m.y += m.vy * dt;
-    m.rot += m.spin * dt;
-    m.flash = Math.max(0, m.flash - dt);
+    m.x += m.vx * wdt;
+    m.y += m.vy * wdt;
+    m.rot += m.spin * wdt;
+    m.flash = Math.max(0, m.flash - wdt);
     if (m.x < m.r) { m.x = m.r; m.vx = Math.abs(m.vx); }
     if (m.x > W - m.r) { m.x = W - m.r; m.vx = -Math.abs(m.vx); }
 
     if (m.kind === 'homing') {
       const landX = m.x + m.vx * (GROUND_Y - m.y) / m.vy;
-      m.vx = clamp(m.vx + Math.sign(p.x - landX) * 70 * dt, -110, 110);
+      m.vx = clamp(m.vx + Math.sign(p.x - landX) * 70 * wdt, -110, 110);
     }
-    if (planet.wind && m.kind !== 'titan') m.vx = clamp(m.vx + G.wind * dt, -170, 170);
+    if (planet.wind && m.kind !== 'titan') m.vx = clamp(m.vx + G.wind * wdt, -170, 170);
     if (m.kind === 'cluster' && m.y > m.burstY) { scatter(m); continue; }
 
-    m.trail -= dt;
+    m.trail -= wdt;
     if (m.trail <= 0) {
       m.trail = 0.045;
       const colors = METEOR_STYLE[m.kind].trail;

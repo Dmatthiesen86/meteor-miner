@@ -50,6 +50,7 @@ export const GOLDEN = { from: 6, chance: 0.025, name: 'Golden meteors', tip: 'Ra
 const KIND_CHANCE = 0.09, KIND_CHANCE_MAX = 0.5;
 
 export function pickKind(cfg) {
+  if (cfg.harmless) return 'normal';
   if (cfg.n >= GOLDEN.from && Math.random() < GOLDEN.chance) return 'golden';
   const share = Math.min(KIND_CHANCE_MAX, cfg.kinds.length * KIND_CHANCE);
   if (!cfg.kinds.length || Math.random() >= share) return 'normal';
@@ -81,15 +82,33 @@ export const PLANETS = [
 ].map(p => ({ ...PLANET_DEFAULTS, ...p }));
 export const planetFor = n => PLANETS[Math.floor((n - 1) / 10) % PLANETS.length];
 
+// Special stages that turn up at random on ordinary stages (never on a UFO, boss or
+// new-threat stage). Which stages get one changes with every expedition.
+export const EVENTS = {
+  storm: { name: 'Meteor storm', tip: 'Short and twice as dense. Every meteor drops double rocks.' },
+  gold:  { name: 'Gold rush',    tip: 'Every meteor carries the richest ore around.' },
+  bonus: { name: 'Bonus round',  tip: '25 seconds of small, harmless meteors. Grab everything.' },
+};
+const EVENT_CHANCE = 28;   // percent of eligible stages
+
+function eventFor(n, seed, hasThreat) {
+  if (n < 4 || n % 5 === 0 || hasThreat) return null;
+  let h = Math.imul(n * 31 + seed * 977 + 1, 2654435761) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  if (h % 100 >= EVENT_CHANCE) return null;
+  return Object.keys(EVENTS)[(h >>> 8) % 3];
+}
+
 // Growth is fast over the first ~20 stages, then keeps creeping up so stage 60 is still
 // harder than stage 40.
-export function stageConfig(n) {
+export function stageConfig(n, seed = 0) {
   const late = Math.max(0, n - 20);
   const worldW = n <= 18 ? 360 + 120 * (n - 1) : Math.min(2400 + 40 * (n - 18), 4000);
   const hpMul = 1 + 0.3 * (n - 1) + 0.01 * late * late;
   const newKind = Object.keys(METEOR_KINDS).find(k => METEOR_KINDS[k].from === n);
   const planet = planetFor(n);
-  return {
+  const newThreat = newKind ? METEOR_KINDS[newKind] : n === GOLDEN.from ? GOLDEN : null;
+  const cfg = {
     n,
     worldW,
     duration: 35 + 5 * Math.min(n, 10),
@@ -110,9 +129,44 @@ export function stageConfig(n) {
     boss: n % 10 === 0 ? BOSSES[(n / 10 - 1) % BOSSES.length] : null,
     bossHp: Math.round(250 * hpMul),
     kinds: Object.keys(METEOR_KINDS).filter(k => METEOR_KINDS[k].from <= n),
-    newThreat: newKind ? METEOR_KINDS[newKind] : n === GOLDEN.from ? GOLDEN : null,
+    newThreat,
     oreWeights: Object.fromEntries(ORE_KEYS.map(k => [k, oreWeight(ORES[k], n)])),
+    event: null,
+    rockMul: 1,          // rocks dropped per meteor
+    harmless: false,     // meteors cannot hurt the miner or towers
   };
+
+  const event = eventFor(n, seed, !!newThreat);
+  if (event) cfg.event = { id: event, ...EVENTS[event] };
+  if (event === 'storm') {
+    cfg.duration = Math.round(cfg.duration * 0.6);
+    cfg.interval /= 2;
+    cfg.rockMul = 2;
+  } else if (event === 'gold') {
+    const rich = ORE_KEYS.filter(k => ORES[k].from <= n).slice(-2);
+    cfg.oreWeights = Object.fromEntries(ORE_KEYS.map(k => [k, rich.includes(k) ? 1 : 0]));
+  } else if (event === 'bonus') {
+    cfg.duration = 25;
+    cfg.interval /= 1.5;
+    cfg.minR = 8;
+    cfg.maxR = 14;
+    cfg.speedMin *= 0.7;
+    cfg.speedMax *= 0.7;
+    cfg.kinds = [];
+    cfg.harmless = true;
+  }
+  return cfg;
+}
+
+/** What one rock is worth on average on stage n; used to size mission rewards. */
+export function avgOreValue(n) {
+  let total = 0, worth = 0;
+  for (const k of ORE_KEYS) {
+    const w = oreWeight(ORES[k], n);
+    total += w;
+    worth += w * ORES[k].value;
+  }
+  return worth / total;
 }
 
 // `cost(level)` is the price of the next purchase when `level` are already owned.
@@ -154,6 +208,35 @@ export function priceOf(item, level) {
 
 // Seconds per point of tower repair at each level of the repair upgrade (index = level - 1).
 export const REPAIR_SECONDS = [18, 15, 12, 9, 6];
+
+// ---------- supplies ----------
+// One-use items, bought at the trading post and fired with a button during a stage.
+export const ITEMS = [
+  { id: 'nuke', name: 'Nuke',        label: 'Nuke', base: 300, desc: 'Shoots down every meteor in the sky and wounds UFOs and bosses.' },
+  { id: 'slow', name: 'Time slow',   label: 'Slow', base: 200, desc: 'Meteors, UFOs and bolts crawl for 6 seconds.' },
+  { id: 'cell', name: 'Shield cell', label: 'Cell', base: 150, desc: 'Adds 2 shield charges on the spot.' },
+];
+export const ITEM_CARRY = 3;
+export const itemPrice = (item, stage) => Math.round(item.base * (1 + 0.2 * (stage - 1)) / 10) * 10;
+
+// ---------- missions ----------
+// Three are always active. Progress counts when a stage is cleared.
+//   stat: which end-of-stage number feeds it   from: first stage it can be offered   pay: reward multiplier
+export const MISSIONS = {
+  shoot:   { text: g => `Shoot down ${g} meteors`,                goal: n => 15 + 5 * n,  stat: 'destroyed', pay: 1 },
+  collect: { text: g => `Collect ${g} rocks`,                     goal: n => 40 + 12 * n, stat: 'rocks',     pay: 1 },
+  clear:   { text: g => `Clear ${g} stages`,                      goal: () => 3,          stat: 'stages',    pay: 1 },
+  unhurt:  { text: () => 'Clear a stage without losing a heart',  goal: () => 1,          stat: 'unhurt',    pay: 1.5 },
+  golden:  { text: () => 'Shoot down a golden meteor',            goal: () => 1,          stat: 'golden',    pay: 2, from: 6 },
+  ufo:     { text: () => 'Shoot down a UFO',                      goal: () => 1,          stat: 'ufos',      pay: 2, from: 5 },
+  boss:    { text: () => 'Defeat a boss',                         goal: () => 1,          stat: 'boss',      pay: 3, from: 8 },
+};
+export const MISSION_SLOTS = 3;
+export function missionReward(type, stage) {
+  const raw = avgOreValue(stage) * 90 * MISSIONS[type].pay;
+  const step = raw < 1000 ? 10 : raw < 10000 ? 100 : 1000;
+  return Math.max(50, Math.round(raw / step) * step);
+}
 
 // ---------- bonus picks ----------
 // After every BOON_EVERY-th stage the player picks 1 of 3. They stack, and last until the

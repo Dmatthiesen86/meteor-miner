@@ -88,7 +88,7 @@ function drawLandingMarkers(ctx) {
     if (t > 3.2 && m.kind !== 'titan') continue;       // the titan's mark shows all the way down
     const x = m.x + m.vx * t;
     const near = Math.max(0, 1 - Math.max(0, t) / 3.2);
-    ctx.fillStyle = `rgba(255, 90, 60, ${0.12 + 0.45 * near})`;
+    ctx.fillStyle = `rgba(${G.cfg.harmless ? '111, 227, 154' : '255, 90, 60'}, ${0.12 + 0.45 * near})`;
     ctx.beginPath();
     ctx.ellipse(x, GROUND_Y + 2, blastRadius(m.r), 5, 0, 0, TAU);
     ctx.fill();
@@ -498,6 +498,14 @@ export function render(ctx, time) {
   }
   ctx.restore();
 
+  if (inGame && G.slowT > 0) {
+    ctx.fillStyle = `rgba(120, 200, 255, ${0.12 * Math.min(1, G.slowT)})`;
+    ctx.fillRect(0, 0, vw, GROUND_Y);
+  }
+  if (inGame && G.flashT > 0) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, G.flashT * 2)})`;
+    ctx.fillRect(0, 0, vw, H);
+  }
   if (inGame) {
     drawControls(ctx, vw);
     drawMinimap(ctx, vw, camX);

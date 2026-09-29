@@ -1,12 +1,12 @@
 // DOM side of the game: HUD, tower button, and the menu / shop / pause / game-over panels.
-import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, PRESTIGE_STAGE, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
+import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, ITEMS, ITEM_CARRY, MISSIONS, PRESTIGE_STAGE, itemPrice, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
 import { G, save, newProfile, cargoValue, saleValue, cargoCount, boon } from './state.js';
 import { input } from './input.js';
-import { startStage, towerInReach } from './game.js';
+import { startStage, towerInReach, fillMissions } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
 
 const $ = id => document.getElementById(id);
-const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), jumpBtn = $('jumpBtn');
+const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), jumpBtn = $('jumpBtn'), itemsBar = $('items');
 // Whole dollars below `compactFrom`, then 3 significant figures: $125K, $1.87M.
 function money(n, compactFrom = 100000) {
   if (n < compactFrom) return '$' + Math.round(n).toLocaleString();
@@ -30,6 +30,7 @@ function panel(html) {
   hud.hidden = true;
   towerBtn.hidden = true;
   jumpBtn.hidden = true;
+  itemsBar.hidden = true;
 }
 
 function on(id, fn) {
@@ -56,6 +57,7 @@ export function showMenu() {
       <b>Aim</b> - touch the sky or move the mouse. Your blaster fires on its own.<br>
       <b>Towers</b> - aim, then tap the tower button (or T) to plant one. Stand on it and tap again to re-aim.<br>
       <b>UFOs</b> shoot back on stages 5, 15, 25... and a <b>boss</b> arrives every 10th stage.<br>
+      <b>Supplies</b> - nuke, time slow and shield cell. Buy them at the trading post, fire them with the buttons bottom left (or 1 / 2 / 3).<br>
       <b>Red marks</b> on the ground show where a meteor will land and how wide the blast is.
     </div>
     ${G.hasSave ? `<button class="btn primary" id="continueBtn">Continue - Stage ${p.stage}</button>` : ''}
@@ -126,7 +128,8 @@ export function showShop(summary) {
   const held = BOONS.filter(b => boon(b.id)).map(b => `${b.name}${boon(b.id) > 1 ? ' ×' + boon(b.id) : ''}`);
   const value = saleValue(p.cargo);
   const bonus = value - cargoValue(p.cargo);
-  const next = stageConfig(p.stage);
+  const next = stageConfig(p.stage, p.expeditions);
+  fillMissions(p);
   const shards = shardsFor(p.stage);
 
   const items = SHOP.map(it => {
@@ -162,17 +165,41 @@ export function showShop(summary) {
         ${summary.ufos ? `<span>UFOs shot down</span><span>${summary.ufos}</span>` : ''}
         ${summary.boss ? `<span>${summary.boss.name}</span><span>${summary.boss.beaten ? 'Defeated · +1 ★' : 'Got away'}</span>` : ''}
         ${summary.lost ? `<span>Towers destroyed</span><span>${summary.lost}${summary.replaced ? ` (${summary.replaced} replaced by insurance)` : ''}</span>` : ''}
-      </div>` : ''}
+      </div>
+      ${summary.missions.map(m => `<p class="tag mission-done">Mission complete: ${m.text} · +${money(m.reward)}</p>`).join('')}` : ''}
     <div class="wallet"><span>Cash</span><span class="cash">${money(p.money)}</span></div>
     <div class="cargo-box">
       ${value > 0
         ? `${cargoHtml(p.cargo)}${bonus ? `<div class="cargo-line"><span>Rich veins bonus</span><span class="v">+${money(bonus)}</span></div>` : ''}<button class="btn good" id="sellBtn">Sell rocks for ${money(value)}</button>`
         : '<p style="margin:0">No rocks to sell.</p>'}
     </div>
+    <div class="cargo-box missions">
+      <div class="box-title">Missions</div>
+      ${p.missions.map(m => `
+        <div class="mission">
+          <span class="what">${MISSIONS[m.type].text(m.goal)}</span>
+          <span class="v">${money(m.reward)}</span>
+          <div class="bar"><i style="width:${Math.round(m.progress / m.goal * 100)}%"></i></div>
+          <span class="count">${m.progress} / ${m.goal}</span>
+        </div>`).join('')}
+    </div>
     ${held.length ? `<p class="tag boons-held"><b>Bonuses:</b> ${held.join(', ')}</p>` : ''}
     ${items}
+    <div class="shop-group">Supplies</div>
+    ${ITEMS.map(it => {
+      const have = p.items[it.id], cost = itemPrice(it, p.stage), full = have >= ITEM_CARRY;
+      return `
+      <div class="shop-item">
+        <div class="info">
+          <div><span class="name">${it.name}</span><span class="lvl">${have ? `Have ${have}/${ITEM_CARRY}` : ''}</span></div>
+          <div class="desc">${it.desc}</div>
+        </div>
+        <button data-item="${it.id}" ${full || p.money < cost ? 'disabled' : ''}>${full ? 'FULL' : money(cost)}</button>
+      </div>`;
+    }).join('')}
     <button class="btn primary" id="goBtn">Start stage ${p.stage}</button>
     <p class="tag" style="margin:8px 0 0;font-size:12.5px">${next.planet.name} · Map width ${next.worldW} · shower lasts ${next.duration}s${next.obstacles ? ` · ${next.obstacles} boulder${next.obstacles > 1 ? 's' : ''} to jump` : ''}</p>
+    ${next.event ? `<p class="tag event-warn">${next.event.name}! ${next.event.tip}</p>` : ''}
     ${next.newPlanet ? `<p class="tag planet-warn">New planet: ${next.planet.name}. ${next.planet.tip}</p>` : ''}
     ${next.boss ? `<p class="tag ufo-warn">Boss stage: ${next.boss.name}. ${next.boss.tip}</p>` : ''}
     ${next.newThreat ? `<p class="tag threat-warn">New threat: ${next.newThreat.name}. ${next.newThreat.tip}</p>` : ''}
@@ -209,6 +236,18 @@ export function showShop(summary) {
     if (p.money < cost || (!it.endless && up[it.id] >= it.max) || (it.minStage && p.stage < it.minStage)) { sfx.deny(); return; }
     p.money -= cost;
     up[it.id]++;
+    save();
+    sfx.buy();
+    const scroll = overlay.firstElementChild.scrollTop;
+    showShop(summary);
+    overlay.firstElementChild.scrollTop = scroll;
+  }));
+  overlay.querySelectorAll('[data-item]').forEach(btn => btn.addEventListener('click', () => {
+    unlock();
+    const it = ITEMS.find(x => x.id === btn.dataset.item), cost = itemPrice(it, p.stage);
+    if (p.money < cost || p.items[it.id] >= ITEM_CARRY) { sfx.deny(); return; }
+    p.money -= cost;
+    p.items[it.id]++;
     save();
     sfx.buy();
     const scroll = overlay.firstElementChild.scrollTop;
@@ -313,6 +352,13 @@ export function updateHUD() {
   $('muteBtn').classList.toggle('off', prof.muted);
   $('progress').style.width = (Math.min(1, G.time / G.cfg.duration) * 100).toFixed(1) + '%';
 
+  let anyItem = false;
+  for (const it of ITEMS) {
+    const n = prof.items[it.id], btn = itemsBar.querySelector(`[data-use="${it.id}"]`);
+    btn.hidden = n === 0;
+    if (n) { anyItem = true; setText('use-' + it.id, `${it.label}<b>${n}</b>`); }
+  }
+  itemsBar.hidden = !anyItem;
   jumpBtn.hidden = G.obstacles.length === 0;
   const hasTowers = prof.up.towers > 0;
   towerBtn.hidden = !hasTowers;
@@ -334,6 +380,12 @@ export function initUI() {
     unlock();
     input.deploy = true;
   });
+  itemsBar.innerHTML = ITEMS.map(it => `<button id="use-${it.id}" data-use="${it.id}" class="use-${it.id}" hidden></button>`).join('');
+  itemsBar.querySelectorAll('button').forEach(btn => btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    unlock();
+    input.use = btn.dataset.use;
+  }));
   jumpBtn.addEventListener('pointerdown', e => {
     e.preventDefault();
     unlock();

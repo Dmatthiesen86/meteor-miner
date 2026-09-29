@@ -37,6 +37,7 @@ python -m http.server 5174
 | Aim | touch the sky (aim stays where you left it) | mouse |
 | Jump | Jump button | Space, W or up arrow |
 | Place / re-aim tower | tower button | T or E |
+| Use a supply | round buttons bottom left | 1 (nuke), 2 (time slow), 3 (shield cell) |
 | Pause / mute | buttons top right | P or Esc / M |
 
 The blaster and towers fire on their own whenever meteors are in the sky.
@@ -66,6 +67,12 @@ The blaster and towers fire on their own whenever meteors are in the sky.
 - **Bosses** arrive on every 10th stage, taking turns: the Mothership (fires spreads, drops
   meteors, escapes 45 s after the shower) and the Titan meteor (falls slowly; costs 2 hearts if
   it lands). Beating one and clearing the stage pays 1 star shard.
+- **Supplies**: nuke, time slow and shield cell are one-use items bought at the trading post
+  (carry up to 3 of each). Used items are gone even if you die.
+- **Event stages** turn up at random: meteor storm (short, dense, double rocks), gold rush
+  (richest ore only) and bonus round (harmless meteors). The trading post announces them.
+- **Missions**: three are always active, progress counts when a stage is cleared, and each
+  pays cash.
 - **Bonus picks**: after every 5th stage choose 1 of 3 bonuses. They stack and last until the
   next expedition or new game.
 - **Planets** change every 10 stages, then repeat: Luna, Glacia (slippery), Cinder (faster

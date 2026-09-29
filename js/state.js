@@ -13,6 +13,8 @@ export function newProfile() {
     cargo: emptyCargo(),
     up: { gun: 0, damage: 0, rate: 0, gunAuto: 0, gunRockets: 0, shield: 0, towers: 0, towerDamage: 0, towerRate: 0, towerArmor: 0, towerShield: 0, towerRepair: 0, towerInsurance: 0, autoTarget: 0, rockets: 0, homing: 0, boots: 0, magnet: 0, armor: 0 },
     muted: false,
+    items: { nuke: 0, slow: 0, cell: 0 },   // supplies in the pack
+    missions: [],            // { type, goal, progress, reward }
     boons: {},               // bonus picks held this run: id -> how many
     pendingBoon: null,       // the 3 ids on offer, until one is chosen
     // permanent: survive both "New game" and a new expedition
@@ -31,7 +33,7 @@ function load() {
     // Saves from before tower power was split into damage and armor.
     if (up.towerPower) { up.towerDamage = Math.max(up.towerDamage, up.towerPower); }
     delete up.towerPower;
-    return { ...base, ...s, up, cargo: { ...base.cargo, ...s.cargo }, perks: { ...base.perks, ...s.perks } };
+    return { ...base, ...s, up, cargo: { ...base.cargo, ...s.cargo }, perks: { ...base.perks, ...s.perks }, items: { ...base.items, ...s.items } };
   } catch {
     return null;
   }
@@ -69,7 +71,9 @@ export const G = {
   obstacles: [], meteors: [], ufos: [], shots: [], rocks: [], bullets: [], towers: [], parts: [], floaters: [],
   towersLeft: 0,
   haul: emptyCargo(),
-  stats: { destroyed: 0, landed: 0, ufos: 0, boss: false },
+  stats: { destroyed: 0, landed: 0, ufos: 0, boss: false, golden: 0, hurt: false },
+  slowT: 0,                // seconds of Time slow left
+  flashT: 0,               // white-out after a nuke
   boss: null,              // the boss in play, for the health bar
   wind: 0,
   banner: null,
