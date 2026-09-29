@@ -44,6 +44,7 @@ export function showMenu() {
       <b>Run</b> - drag along the bottom strip, or A / D / arrow keys.<br>
       <b>Aim</b> - touch the sky or move the mouse. Your blaster fires on its own.<br>
       <b>Towers</b> - aim, then tap the tower button (or T) to plant one. Stand on it and tap again to re-aim.<br>
+      <b>UFOs</b> show up every 5th stage and shoot back. Shoot them down for crystals.<br>
       <b>Red marks</b> on the ground show where a meteor will land and how wide the blast is.
     </div>
     ${G.hasSave ? `<button class="btn primary" id="continueBtn">Continue - Stage ${p.stage}</button>` : ''}
@@ -78,17 +79,22 @@ export function showShop(summary) {
   const next = stageConfig(p.stage);
 
   const items = SHOP.map(it => {
+    if (it.group) return `<div class="shop-group">${it.group}</div>`;
     const lvl = up[it.id];
-    const locked = it.needs && !up[it.needs];
+    const tooEarly = it.minStage && p.stage < it.minStage;
+    const locked = tooEarly || (it.needs && !up[it.needs]);
     const maxed = lvl >= it.max;
     const cost = it.cost(lvl);
     const label = maxed ? 'MAX' : locked ? 'Locked' : money(cost);
+    const desc = tooEarly ? `Unlocks at stage ${it.minStage}.`
+      : locked ? `Needs a ${SHOP.find(s => s.id === it.needs).name.toLowerCase()} first.`
+      : typeof it.desc === 'function' ? it.desc(lvl) : it.desc;
     const level = it.max === 1 ? (lvl ? 'Owned' : '') : it.id === 'towers' ? `Owned ${lvl}/${it.max}` : lvl ? `Lv ${lvl}` : '';
     return `
       <div class="shop-item">
         <div class="info">
           <div><span class="name">${it.name}</span><span class="lvl">${level}</span></div>
-          <div class="desc">${locked ? `Needs a ${SHOP.find(s => s.id === it.needs).name.toLowerCase()} first.` : it.desc}</div>
+          <div class="desc">${desc}</div>
         </div>
         <button data-buy="${it.id}" ${maxed || locked || p.money < cost ? 'disabled' : ''}>${label}</button>
       </div>`;
@@ -101,6 +107,7 @@ export function showShop(summary) {
         <span>Rocks collected</span><span>${cargoCount(summary.haul)}</span>
         <span>Meteors shot down</span><span>${summary.destroyed}</span>
         <span>Meteors landed</span><span>${summary.landed}</span>
+        ${summary.ufos ? `<span>UFOs shot down</span><span>${summary.ufos}</span>` : ''}
       </div>` : ''}
     <div class="wallet"><span>Cash</span><span class="cash">${money(p.money)}</span></div>
     <div class="cargo-box">
@@ -111,6 +118,7 @@ export function showShop(summary) {
     ${items}
     <button class="btn primary" id="goBtn">Start stage ${p.stage}</button>
     <p class="tag" style="margin:8px 0 0;font-size:12.5px">Map width ${next.worldW} · shower lasts ${next.duration}s</p>
+    ${next.ufos ? `<p class="tag ufo-warn">UFO sighted! ${next.ufos > 1 ? next.ufos + ' saucers' : 'A saucer'} will shoot back this stage.</p>` : ''}
   `);
 
   if (value > 0) on('sellBtn', () => {
@@ -124,7 +132,7 @@ export function showShop(summary) {
     unlock();
     const it = SHOP.find(s => s.id === btn.dataset.buy);
     const cost = it.cost(up[it.id]);
-    if (p.money < cost || up[it.id] >= it.max) { sfx.deny(); return; }
+    if (p.money < cost || up[it.id] >= it.max || (it.minStage && p.stage < it.minStage)) { sfx.deny(); return; }
     p.money -= cost;
     up[it.id]++;
     save();
@@ -196,7 +204,7 @@ export function updateHUD() {
   const hasTowers = prof.up.towers > 0;
   towerBtn.hidden = !hasTowers;
   if (hasTowers) {
-    const reaim = !!towerInReach();
+    const reaim = !prof.up.autoTarget && !!towerInReach();
     setText('towerBtn', reaim ? 'Re-aim tower' : `Place tower · ${G.towersLeft}`);
     towerBtn.classList.toggle('empty', !reaim && G.towersLeft === 0);
   }

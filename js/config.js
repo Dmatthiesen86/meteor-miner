@@ -26,6 +26,9 @@ export function stageConfig(n) {
     minR: 9,
     maxR: Math.min(23 + 5 * n, 72),
     hpMul: 1 + 0.3 * (n - 1),
+    // Every 5th stage UFOs join the shower and shoot back.
+    ufos: n % 5 === 0 ? Math.min(3, n / 5) : 0,
+    ufoHp: Math.round(30 * (1 + 0.3 * (n - 1))),
     oreWeights: {
       stone: 10,
       iron: 2 + n,
@@ -36,17 +39,29 @@ export function stageConfig(n) {
 }
 
 // `cost(level)` is the price of the next purchase when `level` are already owned.
+// `needs` is another item that must be owned first; `minStage` holds late-game gear back.
 export const SHOP = [
+  { group: 'Miner' },
+  { id: 'boots',      name: 'Boots',          desc: 'Run faster.',                                   max: 6,  cost: l => Math.round(40 * Math.pow(1.6, l)) },
+  { id: 'magnet',     name: 'Magnet',         desc: 'Pull in rocks from further away.',              max: 6,  cost: l => Math.round(35 * Math.pow(1.6, l)) },
+  { id: 'armor',      name: 'Armor',          desc: '+1 heart.',                                     max: 5,  cost: l => Math.round(80 * Math.pow(1.8, l)) },
+  { id: 'shield',     name: 'Shield',         desc: 'Absorbs 1 hit per level. Recharges every stage.', max: 5, cost: l => Math.round(100 * Math.pow(1.7, l)) },
+
+  { group: 'Blaster' },
   { id: 'gun',        name: 'Blaster',        desc: 'Auto-fires wherever you point.',                max: 1,  cost: () => 50 },
   { id: 'damage',     name: 'Blaster damage', desc: '+1 damage per shot.',                           max: 10, cost: l => Math.round(60 * Math.pow(1.55, l)), needs: 'gun' },
   { id: 'rate',       name: 'Fire rate',      desc: 'Blaster shoots 20% faster.',                    max: 8,  cost: l => Math.round(70 * Math.pow(1.5, l)),  needs: 'gun' },
-  { id: 'shield',     name: 'Shield',         desc: 'Absorbs 1 hit per level. Recharges every stage.', max: 5, cost: l => Math.round(100 * Math.pow(1.7, l)) },
+
+  { group: 'Towers' },
   { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Fires non-stop the way you aim it.', max: 6, cost: l => 120 + 80 * l },
   { id: 'towerDamage', name: 'Tower damage',  desc: '+1 damage per shot for every tower.',           max: 10, cost: l => Math.round(80 * Math.pow(1.55, l)), needs: 'towers' },
   { id: 'towerRate',  name: 'Tower fire rate', desc: 'Every tower shoots 20% faster.',               max: 8,  cost: l => Math.round(90 * Math.pow(1.5, l)),  needs: 'towers' },
   { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.6, l)),  needs: 'towers' },
   { id: 'towerShield', name: 'Tower shield',  desc: 'Towers absorb 1 blast per level. Recharges 12s after a hit.', max: 4, cost: l => Math.round(110 * Math.pow(1.7, l)), needs: 'towers' },
-  { id: 'boots',      name: 'Boots',          desc: 'Run faster.',                                   max: 6,  cost: l => Math.round(40 * Math.pow(1.6, l)) },
-  { id: 'magnet',     name: 'Magnet',         desc: 'Pull in rocks from further away.',              max: 6,  cost: l => Math.round(35 * Math.pow(1.6, l)) },
-  { id: 'armor',      name: 'Armor',          desc: '+1 heart.',                                     max: 5,  cost: l => Math.round(80 * Math.pow(1.8, l)) },
+  { id: 'towerRepair', name: 'Tower repair',  desc: l => `Towers mend 1 health every ${REPAIR_SECONDS[Math.min(l, REPAIR_SECONDS.length - 1)]}s.`, max: 5, cost: l => Math.round(100 * Math.pow(1.6, l)), needs: 'towers' },
+  { id: 'autoTarget', name: 'Auto-targeting', desc: 'Towers track and lead the nearest threat on their own.', max: 1, cost: () => 900, needs: 'towers', minStage: 6 },
+  { id: 'rockets',    name: 'Rocket launcher', desc: 'Towers also fire exploding rockets. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(700 * Math.pow(1.6, l)), needs: 'towers', minStage: 8 },
 ];
+
+// Seconds per point of tower repair at each level of the repair upgrade (index = level - 1).
+export const REPAIR_SECONDS = [18, 15, 12, 9, 6];

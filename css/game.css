@@ -101,6 +101,11 @@ html, body {
 .cargo-line .v { margin-left: auto; color: var(--money); font-weight: 600; }
 .cargo-box .btn { margin-top: 8px; }
 
+.shop-group {
+  margin-top: 14px; padding-bottom: 4px;
+  color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
+}
+.ufo-warn { color: #ff7ad9 !important; font-weight: 700; font-size: 13px; margin: 4px 0 0 !important; }
 .shop-item {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 0; border-top: 1px solid var(--line);

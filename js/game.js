@@ -1,5 +1,5 @@
 // The simulation: player, meteors, rocks, bullets, towers and stage flow.
-import { GROUND_Y, ORES, ORE_KEYS, stageConfig } from './config.js';
+import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, stageConfig } from './config.js';
 import { G, save, emptyCargo } from './state.js';
 import { input } from './input.js';
 import { sfx } from './audio.js';
@@ -9,6 +9,10 @@ const BULLET_SPEED = 640;
 const TOWER_SPACING = 30;
 const MAX_PARTS = 350;
 const TOWER_SHIELD_RECHARGE = 12;   // seconds without a hit before a tower's shield refills
+const TOWER_TURN = 4;                // rad/s an auto-targeting tower can swing its barrel
+const ROCKET_SPEED = 380, ROCKET_INTERVAL = 3.2;
+const UFO_R = 20, UFO_SHOT_SPEED = 230;
+const UFO_LINGER = 15;               // seconds after the shower before UFOs give up and leave
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -21,6 +25,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const blastRadius = r => r * 1.5 + 14;
 export const gunStats = up => ({ dmg: 1 + up.damage, interval: 0.3 / (1 + 0.2 * up.rate) });
 export const towerStats = up => ({ dmg: 1 + up.towerDamage, interval: 0.55 / (1 + 0.2 * up.towerRate), hp: 3 + up.towerArmor, shield: up.towerShield });
+export const rocketStats = up => ({ dmg: (2 + up.rockets) * (1 + up.towerDamage), blast: 40 + 9 * up.rockets });
 export const magnetRadius = up => 34 + 20 * up.magnet;
 export const maxHearts = up => 3 + up.armor;
 
@@ -29,10 +34,13 @@ export function startStage() {
   G.cfg = cfg;
   G.worldW = cfg.worldW;
   G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1 };
-  G.meteors = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = [];
+  G.meteors = []; G.ufos = []; G.shots = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = [];
   G.towersLeft = p.up.towers;
   G.haul = emptyCargo();
-  G.stats = { destroyed: 0, landed: 0 };
+  G.stats = { destroyed: 0, landed: 0, ufos: 0 };
+  G.ufosToSpawn = cfg.ufos;
+  G.nextUfoT = cfg.duration * 0.25;
+  G.banner = null;
   G.time = 0;
   G.spawnT = 1.2;
   G.gunT = 0;
@@ -96,6 +104,17 @@ function spawnMeteor() {
   const y = -r - 10;
   const t = (GROUND_Y - y) / vy;
   G.meteors.push(makeMeteor(x, y, (tx - x) / t, vy, r, pickOre(c.oreWeights)));
+}
+
+function spawnUfo() {
+  const W = G.worldW, fromLeft = Math.random() < 0.5;
+  G.ufos.push({
+    x: fromLeft ? -40 : W + 40, y: 70, vx: 0, homeY: rand(105, 190), speed: rand(80, 120),
+    hp: G.cfg.ufoHp, maxHp: G.cfg.ufoHp, cd: rand(2, 3), phase: rand(0, 6),
+    flash: 0, leaving: false, dead: false,
+  });
+  G.banner = { text: 'UFO INCOMING', life: 2.5 };
+  sfx.alarm();
 }
 
 // ---------- effects ----------
@@ -173,22 +192,25 @@ function impact(m) {
 
   if (Math.abs(G.player.x - m.x) < blast + 8) hurtPlayer();
   for (const t of G.towers) {
-    if (Math.abs(t.x - m.x) < blast * 0.8) {
-      t.flash = 0.25;
-      t.recharge = TOWER_SHIELD_RECHARGE;
-      if (t.shield > 0) {
-        t.shield--;
-        burst(t.x, TOWER_Y, 12, 200, ['#8fe9ff', '#d9f8ff'], 4, 200);
-        sfx.shield();
-        continue;
-      }
-      t.hp--;
-      if (t.hp <= 0) {
-        t.dead = true;
-        burst(t.x, TOWER_Y, 16, 200, ['#6fe3ff', '#9aa3ad', '#ffb347'], 4, 600);
-        floater(t.x, TOWER_Y - 24, 'Tower lost', '#ff6b5e');
-      }
-    }
+    if (Math.abs(t.x - m.x) < blast * 0.8) damageTower(t);
+  }
+}
+
+function damageTower(t) {
+  t.flash = 0.25;
+  t.recharge = TOWER_SHIELD_RECHARGE;
+  t.repairT = 0;
+  if (t.shield > 0) {
+    t.shield--;
+    burst(t.x, TOWER_Y, 12, 200, ['#8fe9ff', '#d9f8ff'], 4, 200);
+    sfx.shield();
+    return;
+  }
+  t.hp--;
+  if (t.hp <= 0) {
+    t.dead = true;
+    burst(t.x, TOWER_Y, 16, 200, ['#6fe3ff', '#9aa3ad', '#ffb347'], 4, 600);
+    floater(t.x, TOWER_Y - 24, 'Tower lost', '#ff6b5e');
   }
 }
 
@@ -217,13 +239,78 @@ function damageMeteor(m, dmg, bx, by) {
   else sfx.hit();
 }
 
+function damageUfo(u, dmg, bx, by) {
+  u.hp -= dmg;
+  u.flash = 0.08;
+  burst(bx, by, 3, 140, ['#ff7ad9', '#ffe9a8'], 3, 300);
+  if (u.hp > 0) { sfx.hit(); return; }
+  u.dead = true;
+  G.stats.ufos++;
+  G.shake = Math.max(G.shake, 12);
+  sfx.impact(30);
+  burst(u.x, u.y, 30, 300, ['#ff7ad9', '#8fe9ff', '#ffe9a8', '#9aa3ad'], 5, 400);
+  G.parts.push({ ring: true, x: u.x, y: u.y + 20, r: 60, life: 0.4, max: 0.4 });
+  floater(u.x, u.y - 24, 'UFO down!', '#ff7ad9');
+  // wreckage is the best loot in the game
+  dropRocks({ x: u.x, y: u.y, r: 26, vy: 0, ore: 'crystal' }, 6 + 2 * G.cfg.ufos, false);
+  dropRocks({ x: u.x, y: u.y, r: 26, vy: 0, ore: 'gold' }, 4, false);
+}
+
 function fire(x, y, angle, dmg, color) {
   G.bullets.push({ x, y, vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED, dmg, color, dead: false });
 }
 
+function fireRocket(x, y, angle, stats) {
+  G.bullets.push({
+    x, y, vx: Math.cos(angle) * ROCKET_SPEED, vy: Math.sin(angle) * ROCKET_SPEED,
+    dmg: stats.dmg, blast: stats.blast, color: '#ffb347', trail: 0, dead: false,
+  });
+}
+
+// A rocket going off: everything inside the blast takes the full damage.
+function explode(b) {
+  G.shake = Math.max(G.shake, 5);
+  sfx.shatter(b.blast * 0.5);
+  burst(b.x, b.y, 18, 260, ['#ffb347', '#ff6b3c', '#ffe9a8'], 5, 200);
+  G.parts.push({ ring: true, x: b.x, y: b.y + b.blast * 0.35, r: b.blast, life: 0.3, max: 0.3 });
+  const n = G.meteors.length;               // pieces that split off are spared this blast
+  for (let i = 0; i < n; i++) {
+    const m = G.meteors[i];
+    if (!m.dead && Math.hypot(m.x - b.x, m.y - b.y) < b.blast + m.r) damageMeteor(m, b.dmg, m.x, m.y);
+  }
+  for (const u of G.ufos) {
+    if (!u.dead && Math.hypot(u.x - b.x, u.y - b.y) < b.blast + UFO_R) damageUfo(u, b.dmg, u.x, u.y);
+  }
+}
+
+// Angle that leads a tower's target, or null if the sky is clear. A meteor about to land
+// on the tower comes first (lowest one wins); otherwise it takes the nearest threat.
+function targetAngle(t) {
+  let best = null, bestD = Infinity, danger = null;
+  for (const m of G.meteors) {
+    if (m.dead || m.y < 0 || m.y > GROUND_Y - 30) continue;
+    const landX = m.x + m.vx * (GROUND_Y - m.y) / m.vy;
+    if (Math.abs(landX - t.x) < blastRadius(m.r) * 0.8 + 10 && (!danger || m.y > danger.y)) danger = m;
+    const d = Math.hypot(m.x - t.x, m.y - TOWER_Y);
+    if (d < bestD) { bestD = d; best = m; }
+  }
+  for (const u of G.ufos) {
+    if (u.dead || u.leaving || u.y < 0) continue;
+    const d = Math.hypot(u.x - t.x, u.y - TOWER_Y);
+    if (d < bestD) { bestD = d; best = u; }
+  }
+  if (danger) { best = danger; bestD = Math.hypot(danger.x - t.x, danger.y - TOWER_Y); }
+  if (!best) return null;
+  const lead = bestD / BULLET_SPEED;
+  return clampAim(Math.atan2(best.y + (best.vy || 0) * lead - TOWER_Y, best.x + best.vx * lead - t.x));
+}
+
 function deployTower() {
   const near = towerInReach();
-  if (near) {
+  if (near && G.profile.up.autoTarget) {
+    sfx.deny();
+    floater(near.x, TOWER_Y - 26, 'Auto-aiming', '#b9f1ff');
+  } else if (near) {
     near.angle = G.aim;
     near.flash = 0.2;
     sfx.deploy();
@@ -231,7 +318,10 @@ function deployTower() {
   } else if (G.towersLeft > 0) {
     G.towersLeft--;
     const { hp, shield } = towerStats(G.profile.up);
-    G.towers.push({ x: G.player.x, angle: G.aim, cd: 0.3, hp, maxHp: hp, shield, maxShield: shield, recharge: 0, flash: 0.2, dead: false });
+    G.towers.push({
+      x: G.player.x, angle: G.aim, cd: 0.3, rocketCd: 1.5, hp, maxHp: hp, shield, maxShield: shield,
+      recharge: 0, repairT: 0, flash: 0.2, dead: false,
+    });
     sfx.deploy();
   } else {
     sfx.deny();
@@ -254,7 +344,7 @@ function finishStage() {
   G.rocks = [];
   for (const k of ORE_KEYS) p.cargo[k] += G.haul[k];
   p.up.towers = G.towersLeft + G.towers.length;       // destroyed towers are gone for good
-  const summary = { stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, hp: G.player.hp };
+  const summary = { stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos, hp: G.player.hp };
   p.stage++;
   p.best = Math.max(p.best, p.stage);
   G.hasSave = true;
@@ -301,8 +391,51 @@ export function update(dt) {
     }
   }
 
+  // UFOs arrive part-way through the shower, hover over the player and shoot back
+  if (!clearing && G.ufosToSpawn > 0 && G.time >= G.nextUfoT) {
+    G.ufosToSpawn--;
+    G.nextUfoT = G.time + 12;
+    spawnUfo();
+  }
+  for (const u of G.ufos) {
+    u.flash = Math.max(0, u.flash - dt);
+    if (G.time > cfg.duration + UFO_LINGER) u.leaving = true;
+    if (u.leaving) {
+      u.y -= 170 * dt;
+      if (u.y < -60) u.dead = true;
+      continue;
+    }
+    u.y += (u.homeY + Math.sin(G.time * 2 + u.phase) * 6 - u.y) * Math.min(1, dt * 1.5);
+    const want = clamp(p.x + Math.sin(G.time * 0.6 + u.phase) * 150, 30, W - 30);
+    u.vx += (clamp((want - u.x) * 1.5, -u.speed, u.speed) - u.vx) * Math.min(1, dt * 3);
+    u.x += u.vx * dt;
+    u.cd -= dt;
+    if (u.cd <= 0 && u.x > 0 && u.x < W && !clearing) {
+      u.cd = rand(1.5, 2.4);
+      const t = G.towers.length && Math.random() < 0.35 ? G.towers[Math.floor(Math.random() * G.towers.length)] : null;
+      const a = Math.atan2((t ? TOWER_Y : GROUND_Y - 18) - (u.y + 10), (t ? t.x : p.x) - u.x);
+      G.shots.push({ x: u.x, y: u.y + 10, vx: Math.cos(a) * UFO_SHOT_SPEED, vy: Math.sin(a) * UFO_SHOT_SPEED, dead: false });
+      sfx.ufoShot();
+    }
+  }
+  for (const s of G.shots) {
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    if (s.y >= GROUND_Y) {
+      s.dead = true;
+      burst(s.x, GROUND_Y, 6, 120, ['#ff7ad9', '#ffe9a8'], 3, 400, true);
+    } else if (p.inv <= 0 && !clearing && Math.abs(s.x - p.x) < 10 && s.y > GROUND_Y - PLAYER_H) {
+      s.dead = true;
+      hurtPlayer();
+    } else {
+      const t = G.towers.find(t => !t.dead && Math.abs(s.x - t.x) < 12 && s.y > TOWER_Y - 10);
+      if (t) { s.dead = true; damageTower(t); }
+    }
+  }
+
   // guns only fire while there is something to shoot at
-  if (G.meteors.length) {
+  const hostile = G.meteors.length > 0 || G.ufos.length > 0;
+  if (hostile) {
     if (up.gun) {
       G.gunT -= dt;
       if (G.gunT <= 0) {
@@ -312,18 +445,40 @@ export function update(dt) {
         sfx.shoot();
       }
     }
-    const ts = towerStats(up);
-    for (const t of G.towers) {
-      t.cd -= dt;
-      if (t.cd <= 0) {
-        t.cd = ts.interval;
-        fire(t.x + Math.cos(t.angle) * 20, TOWER_Y + Math.sin(t.angle) * 20, t.angle, ts.dmg, '#8fe9ff');
-        sfx.tower();
+  }
+  const ts = towerStats(up);
+  for (const t of G.towers) {
+    let armed = hostile;
+    if (up.autoTarget) {
+      const want = targetAngle(t);
+      if (want === null) armed = false;
+      else {
+        t.angle += clamp(want - t.angle, -TOWER_TURN * dt, TOWER_TURN * dt);
+        armed = Math.abs(want - t.angle) < 0.15;      // hold fire until the barrel is on target
       }
     }
-  }
-  for (const t of G.towers) {
+    t.cd = Math.max(0, t.cd - dt);
+    t.rocketCd = Math.max(0, t.rocketCd - dt);
+    if (armed && t.cd <= 0) {
+      t.cd = ts.interval;
+      fire(t.x + Math.cos(t.angle) * 20, TOWER_Y + Math.sin(t.angle) * 20, t.angle, ts.dmg, '#8fe9ff');
+      sfx.tower();
+    }
+    if (armed && up.rockets && t.rocketCd <= 0) {
+      t.rocketCd = ROCKET_INTERVAL;
+      fireRocket(t.x + Math.cos(t.angle) * 20, TOWER_Y + Math.sin(t.angle) * 20, t.angle, rocketStats(up));
+      sfx.rocket();
+    }
+
     t.flash = Math.max(0, t.flash - dt);
+    if (up.towerRepair && t.hp < t.maxHp) {
+      t.repairT += dt;
+      if (t.repairT >= REPAIR_SECONDS[up.towerRepair - 1]) {
+        t.repairT = 0;
+        t.hp++;
+        floater(t.x, TOWER_Y - 30, '+1 repair', '#6fe39a');
+      }
+    }
     if (t.shield < t.maxShield) {
       t.recharge -= dt;
       if (t.recharge <= 0) {
@@ -338,14 +493,31 @@ export function update(dt) {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     if (b.y < -40 || b.x < -40 || b.x > W + 40 || b.y > GROUND_Y) { b.dead = true; continue; }
+    if (b.blast) {
+      b.trail -= dt;
+      if (b.trail <= 0) {
+        b.trail = 0.03;
+        particle(b.x, b.y, rand(-20, 20), rand(-20, 20), 0.35, Math.random() < 0.5 ? '#9aa3ad' : '#ffb347', 4);
+      }
+    }
+    let hit = null, isUfo = false;
     for (const m of G.meteors) {
       if (m.dead) continue;
       const dx = m.x - b.x, dy = m.y - b.y, rr = m.r + 3;
-      if (dx * dx + dy * dy < rr * rr) {
-        b.dead = true;
-        damageMeteor(m, b.dmg, b.x, b.y);
-        break;
+      if (dx * dx + dy * dy < rr * rr) { hit = m; break; }
+    }
+    if (!hit) {
+      for (const u of G.ufos) {
+        if (u.dead) continue;
+        const dx = (u.x - b.x) / 1.5, dy = u.y - b.y;          // saucers are wider than tall
+        if (dx * dx + dy * dy < UFO_R * UFO_R) { hit = u; isUfo = true; break; }
       }
+    }
+    if (hit) {
+      b.dead = true;
+      if (b.blast) explode(b);
+      else if (isUfo) damageUfo(hit, b.dmg, b.x, b.y);
+      else damageMeteor(hit, b.dmg, b.x, b.y);
     }
   }
 
@@ -417,18 +589,22 @@ export function update(dt) {
     q.y += q.vy * dt;
   }
   for (const f of G.floaters) { f.life -= dt; f.y -= 34 * dt; }
+  if (G.banner && (G.banner.life -= dt) <= 0) G.banner = null;
 
   G.bullets = G.bullets.filter(b => !b.dead);
   G.meteors = G.meteors.filter(m => !m.dead);
+  G.ufos = G.ufos.filter(u => !u.dead);
+  G.shots = G.shots.filter(s => !s.dead);
   G.rocks = G.rocks.filter(r => !r.dead);
   G.towers = G.towers.filter(t => !t.dead);
   G.parts = G.parts.filter(q => q.life > 0);
   G.floaters = G.floaters.filter(f => f.life > 0);
 
   // stage flow: once the shower ends, the leftover rocks fly in and the shop opens
-  if (G.mode === 'playing' && G.time >= cfg.duration && G.meteors.length === 0) {
+  if (G.mode === 'playing' && G.time >= cfg.duration && G.meteors.length === 0 && G.ufos.length === 0 && G.ufosToSpawn === 0) {
     G.mode = 'clearing';
     G.clearT = 0;
+    G.shots = [];
     sfx.clear();
   } else if (G.mode === 'clearing') {
     G.clearT += dt;

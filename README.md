@@ -50,6 +50,12 @@ The blaster and towers fire on their own whenever meteors are in the sky.
 - A shield soaks up one hit per level before you lose hearts, and recharges every stage.
 - Towers take 3 blasts (more with tower armor). A tower shield soaks up blasts first and
   refills 12 s after the last hit. A destroyed tower is gone; surviving towers come back next stage.
+- With tower repair, damaged towers mend 1 health every few seconds (the timer restarts when hit).
+- **UFOs** arrive on every 5th stage (one on stage 5, two on 10, three from 15). They hover over
+  you and fire at you and your towers. Shoot them down for crystals and gold; if you can't,
+  they leave 15 s after the shower ends.
+- **Auto-targeting** (from stage 6) makes towers track and lead the nearest threat.
+  **Rocket launchers** (from stage 8) add an exploding rocket every ~3 s.
 - Dying loses the rocks from that stage only. Cash, gear and towers are kept.
 - Progress saves in the browser (per device).
 

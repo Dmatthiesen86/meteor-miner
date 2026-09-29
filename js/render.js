@@ -126,6 +126,41 @@ function drawMeteor(ctx, m) {
   }
 }
 
+function drawUfo(ctx, u, time) {
+  ctx.save();
+  ctx.translate(u.x, u.y);
+  ctx.rotate(Math.max(-0.25, Math.min(0.25, u.vx * 0.002)));
+  const lit = u.flash > 0;
+  ctx.fillStyle = lit ? '#fff' : 'rgba(143, 233, 255, .75)';          // dome
+  ctx.beginPath();
+  ctx.ellipse(0, -5, 13, 12, 0, Math.PI, TAU);
+  ctx.fill();
+  ctx.fillStyle = lit ? '#fff' : '#8a93b8';                            // hull
+  ctx.strokeStyle = '#23263f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 30, 9, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = lit ? '#fff' : '#5d6486';
+  ctx.beginPath();
+  ctx.ellipse(0, 5, 14, 5, 0, 0, Math.PI);
+  ctx.fill();
+  for (let i = -2; i <= 2; i++) {                                      // running lights
+    ctx.fillStyle = Math.floor(time * 6 + i + 100) % 2 ? '#ff7ad9' : '#ffe9a8';
+    ctx.beginPath();
+    ctx.arc(i * 11, 1, 2, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+  if (u.hp < u.maxHp) {
+    ctx.fillStyle = 'rgba(0, 0, 0, .6)';
+    ctx.fillRect(u.x - 25, u.y - 26, 50, 5);
+    ctx.fillStyle = '#ff7ad9';
+    ctx.fillRect(u.x - 24, u.y - 25, 48 * Math.max(0, u.hp / u.maxHp), 3);
+  }
+}
+
 function drawRock(ctx, r) {
   if (r.life < 3 && Math.floor(r.life * 8) % 2 === 0) return;   // blink before vanishing
   ctx.save();
@@ -296,6 +331,8 @@ function drawMinimap(ctx, vw, camX) {
     const s = Math.max(2, m.r * k);
     ctx.fillRect(x0 + m.x * k - s / 2, y - 1, s, 3);
   }
+  ctx.fillStyle = '#ff7ad9';
+  for (const u of G.ufos) ctx.fillRect(x0 + u.x * k - 3, y - 3, 6, 4);
   ctx.fillStyle = '#fff';
   ctx.fillRect(x0 + G.player.x * k - 1.5, y - 2, 3, 9);
 }
@@ -342,10 +379,21 @@ export function render(ctx, time) {
       drawPlayer(ctx, p, up);
     }
     for (const m of G.meteors) drawMeteor(ctx, m);
+    for (const u of G.ufos) drawUfo(ctx, u, time);
+    for (const s of G.shots) {
+      ctx.fillStyle = 'rgba(255, 122, 217, .35)';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 8, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#ffd6f3';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 3.5, 0, TAU);
+      ctx.fill();
+    }
 
     ctx.lineCap = 'round';
-    ctx.lineWidth = 3;
     for (const b of G.bullets) {
+      ctx.lineWidth = b.blast ? 6 : 3;
       ctx.strokeStyle = b.color;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
@@ -369,6 +417,14 @@ export function render(ctx, time) {
   if (inGame) {
     drawControls(ctx, vw);
     drawMinimap(ctx, vw, camX);
+    if (G.banner) {
+      ctx.globalAlpha = Math.min(1, G.banner.life) * (0.6 + 0.4 * Math.sin(time * 14));
+      ctx.fillStyle = '#ff7ad9';
+      ctx.font = '800 24px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(G.banner.text, vw / 2, 110);
+      ctx.globalAlpha = 1;
+    }
     if (G.mode === 'clearing') {
       ctx.fillStyle = '#ffd166';
       ctx.font = '800 30px system-ui, sans-serif';
