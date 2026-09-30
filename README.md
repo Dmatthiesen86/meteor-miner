@@ -57,6 +57,8 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   refills 12 s after the last hit. A destroyed tower is gone; surviving towers come back next stage.
 - **Special meteors** arrive on a schedule: cluster (stage 3), golden (6, rare jackpot), ice (8),
   fire (13), armored (18), seeker (23). The trading post warns you before each first appears.
+- **Ore thins out on wide maps**: a wider map spawns more meteors, so each drops fewer rocks.
+  Income grows with stage (richer ore), not with map size.
 - **Richer ore** appears deeper in: emerald (stage 12), ruby (20), diamond (30), star core (45).
 - **Endless upgrades**: blaster damage, tower damage, tower armor and armor never max out.
 - **Expeditions**: from stage 15 you can restart at stage 1 for star shards, which buy

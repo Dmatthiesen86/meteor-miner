@@ -249,6 +249,7 @@ function floater(x, y, text, color) {
 
 function dropRocks(m, count, onGround) {
   count *= G.cfg.rockMul;
+  count = Math.floor(count) + (Math.random() < count % 1 ? 1 : 0);   // 0.4 rocks = a 40% chance of one
   for (let i = 0; i < count; i++) {
     // Mostly the meteor's own ore, with some plain stone mixed in.
     const ore = m.kind === 'golden' || Math.random() < 0.7 ? m.ore : 'stone';

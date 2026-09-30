@@ -105,7 +105,7 @@ export function stageConfig(n, seed = 0) {
   const late = Math.max(0, n - 20), mid = Math.max(0, n - 8);
   const worldW = n <= 18 ? 360 + 120 * (n - 1) : Math.min(2400 + 40 * (n - 18), 4000);
   // Meteor health: linear early, then curving up from stage 9 so maxed gear stops trivialising it.
-  const hpMul = 1 + 0.3 * (n - 1) + 0.03 * mid * mid + 0.01 * late * late;
+  const hpMul = 1 + 0.3 * (n - 1) + 0.02 * mid * mid + 0.01 * late * late;
   const newKind = Object.keys(METEOR_KINDS).find(k => METEOR_KINDS[k].from === n);
   const planet = planetFor(n);
   const newThreat = newKind ? METEOR_KINDS[newKind] : n === GOLDEN.from ? GOLDEN : null;
@@ -133,7 +133,9 @@ export function stageConfig(n, seed = 0) {
     newThreat,
     oreWeights: Object.fromEntries(ORE_KEYS.map(k => [k, oreWeight(ORES[k], n)])),
     event: null,
-    rockMul: 1,          // rocks dropped per meteor
+    // Rocks per meteor. Wider maps spawn more meteors, so the yield is thinned out with
+    // width or income would balloon with map size instead of with skill.
+    rockMul: Math.pow(360 / worldW, 0.35),
     harmless: false,     // meteors cannot hurt the miner or towers
   };
 
@@ -142,7 +144,7 @@ export function stageConfig(n, seed = 0) {
   if (event === 'storm') {
     cfg.duration = Math.round(cfg.duration * 0.6);
     cfg.interval /= 2;
-    cfg.rockMul = 2;
+    cfg.rockMul *= 2;
   } else if (event === 'gold') {
     const rich = ORE_KEYS.filter(k => ORES[k].from <= n).slice(-2);
     cfg.oreWeights = Object.fromEntries(ORE_KEYS.map(k => [k, rich.includes(k) ? 1 : 0]));
