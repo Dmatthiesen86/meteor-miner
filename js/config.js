@@ -102,9 +102,10 @@ function eventFor(n, seed, hasThreat) {
 // Growth is fast over the first ~20 stages, then keeps creeping up so stage 60 is still
 // harder than stage 40.
 export function stageConfig(n, seed = 0) {
-  const late = Math.max(0, n - 20);
+  const late = Math.max(0, n - 20), mid = Math.max(0, n - 8);
   const worldW = n <= 18 ? 360 + 120 * (n - 1) : Math.min(2400 + 40 * (n - 18), 4000);
-  const hpMul = 1 + 0.3 * (n - 1) + 0.01 * late * late;
+  // Meteor health: linear early, then curving up from stage 9 so maxed gear stops trivialising it.
+  const hpMul = 1 + 0.3 * (n - 1) + 0.03 * mid * mid + 0.01 * late * late;
   const newKind = Object.keys(METEOR_KINDS).find(k => METEOR_KINDS[k].from === n);
   const planet = planetFor(n);
   const newThreat = newKind ? METEOR_KINDS[newKind] : n === GOLDEN.from ? GOLDEN : null;
@@ -174,10 +175,10 @@ export function avgOreValue(n) {
 // `endless` items can be bought past `max`; see priceOf().
 export const SHOP = [
   { group: 'Miner' },
-  { id: 'boots',      name: 'Boots',          desc: 'Run faster.',                                   max: 6,  cost: l => Math.round(40 * Math.pow(1.6, l)) },
-  { id: 'magnet',     name: 'Magnet',         desc: 'Pull in rocks from further away.',              max: 6,  cost: l => Math.round(35 * Math.pow(1.6, l)) },
-  { id: 'armor',      name: 'Armor',          desc: '+1 heart.',                                     max: 5,  cost: l => Math.round(80 * Math.pow(1.8, l)), endless: true },
-  { id: 'shield',     name: 'Shield',         desc: 'Absorbs 1 hit per level. Recharges every stage.', max: 5, cost: l => Math.round(100 * Math.pow(1.7, l)) },
+  { id: 'boots',      name: 'Boots',          desc: 'Run faster.',                                   max: 6,  cost: l => Math.round(40 * Math.pow(1.8, l)) },
+  { id: 'magnet',     name: 'Magnet',         desc: 'Pull in rocks from further away.',              max: 6,  cost: l => Math.round(35 * Math.pow(1.8, l)) },
+  { id: 'armor',      name: 'Armor',          desc: '+1 heart.',                                     max: 5,  cost: l => Math.round(80 * Math.pow(2.0, l)), endless: true },
+  { id: 'shield',     name: 'Shield',         desc: 'Absorbs 1 hit per level. Recharges every stage.', max: 5, cost: l => Math.round(100 * Math.pow(1.9, l)) },
   { id: 'doubleJump', name: 'Double jump',   desc: 'Tap again in the air for a second jump.',        max: 1, cost: () => 400,  minStage: 3 },
   { id: 'airDodge',   name: 'Blast boots',   desc: 'Ground blasts miss you while you are in the air. Direct hits still count.', max: 1, cost: () => 900, minStage: 6 },
   { id: 'regen',      name: 'Med kit',       desc: l => `Heal 1 heart every ${REGEN_SECONDS[Math.min(l, REGEN_SECONDS.length - 1)]}s.`, max: 4, cost: l => Math.round(300 * Math.pow(1.8, l)), minStage: 4 },
@@ -185,21 +186,21 @@ export const SHOP = [
 
   { group: 'Blaster' },
   { id: 'gun',        name: 'Blaster',        desc: 'Fires straight up, non-stop.',                  max: 1,  cost: () => 50 },
-  { id: 'damage',     name: 'Blaster damage', desc: '+1 damage per shot.',                           max: 10, cost: l => Math.round(60 * Math.pow(1.55, l)), needs: 'gun', endless: true },
-  { id: 'rate',       name: 'Blaster fire rate', desc: 'Blaster shoots 20% faster.',                 max: 8,  cost: l => Math.round(70 * Math.pow(1.5, l)),  needs: 'gun' },
+  { id: 'damage',     name: 'Blaster damage', desc: '+1 damage per shot.',                           max: 10, cost: l => Math.round(60 * Math.pow(1.75, l)), needs: 'gun', endless: true },
+  { id: 'rate',       name: 'Blaster fire rate', desc: 'Blaster shoots 20% faster.',                 max: 8,  cost: l => Math.round(70 * Math.pow(1.7, l)),  needs: 'gun' },
   { id: 'gunAuto',    name: 'Blaster auto-targeting', desc: 'Blaster swings to track the nearest threat instead of only firing straight up.', max: 1, cost: () => 800, needs: 'gun', minStage: 6 },
   { id: 'gunRockets', name: 'Blaster rockets', desc: 'Blaster also fires an exploding rocket every 2.5s. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(600 * Math.pow(1.6, l)), needs: 'gun', minStage: 6 },
-  { id: 'crit',       name: 'Critical hits', desc: '+6% chance for a blaster bullet to hit for triple damage.', max: 8, cost: l => Math.round(250 * Math.pow(1.5, l)), needs: 'gun', minStage: 4 },
+  { id: 'crit',       name: 'Critical hits', desc: '+6% chance for a blaster bullet to hit for triple damage.', max: 8, cost: l => Math.round(250 * Math.pow(1.65, l)), needs: 'gun', minStage: 4 },
   { id: 'explosive',  name: 'Explosive rounds', desc: 'Blaster bullets burst, hitting everything nearby for half damage. Each level: wider burst.', max: 5, cost: l => Math.round(500 * Math.pow(1.6, l)), needs: 'gun', minStage: 7 },
   { id: 'chain',      name: 'Chain lightning', desc: 'Each blaster hit arcs to 1 more nearby meteor per level for half damage.', max: 4, cost: l => Math.round(700 * Math.pow(1.7, l)), needs: 'gun', minStage: 9 },
 
   { group: 'Towers' },
-  { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Swipe up to plant it firing straight up; swipe up again on it to turn it.', max: 6, cost: l => 120 + 80 * l },
-  { id: 'towerDamage', name: 'Tower damage',  desc: '+1 damage per shot for every tower.',           max: 10, cost: l => Math.round(80 * Math.pow(1.55, l)), needs: 'towers', endless: true },
-  { id: 'towerRate',  name: 'Tower fire rate', desc: 'Every tower shoots 20% faster.',               max: 8,  cost: l => Math.round(90 * Math.pow(1.5, l)),  needs: 'towers' },
-  { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.6, l)),  needs: 'towers', endless: true },
-  { id: 'towerShield', name: 'Tower shield',  desc: 'Towers absorb 1 blast per level. Recharges 12s after a hit.', max: 4, cost: l => Math.round(110 * Math.pow(1.7, l)), needs: 'towers' },
-  { id: 'towerRepair', name: 'Tower repair',  desc: l => `Towers mend 1 health every ${REPAIR_SECONDS[Math.min(l, REPAIR_SECONDS.length - 1)]}s.`, max: 5, cost: l => Math.round(100 * Math.pow(1.6, l)), needs: 'towers' },
+  { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Swipe up to plant it firing straight up; swipe up again on it to turn it.', max: 6, cost: l => Math.round(120 * Math.pow(1.6, l)) },
+  { id: 'towerDamage', name: 'Tower damage',  desc: '+1 damage per shot for every tower.',           max: 10, cost: l => Math.round(80 * Math.pow(1.75, l)), needs: 'towers', endless: true },
+  { id: 'towerRate',  name: 'Tower fire rate', desc: 'Every tower shoots 20% faster.',               max: 8,  cost: l => Math.round(90 * Math.pow(1.7, l)),  needs: 'towers' },
+  { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.8, l)),  needs: 'towers', endless: true },
+  { id: 'towerShield', name: 'Tower shield',  desc: 'Towers absorb 1 blast per level. Recharges 12s after a hit.', max: 4, cost: l => Math.round(110 * Math.pow(1.9, l)), needs: 'towers' },
+  { id: 'towerRepair', name: 'Tower repair',  desc: l => `Towers mend 1 health every ${REPAIR_SECONDS[Math.min(l, REPAIR_SECONDS.length - 1)]}s.`, max: 5, cost: l => Math.round(100 * Math.pow(1.8, l)), needs: 'towers' },
   { id: 'towerInsurance', name: 'Tower insurance', desc: 'Replaces 1 destroyed tower per level for free when a stage ends.', max: 6, cost: l => Math.round(150 * Math.pow(1.5, l)), needs: 'towers' },
   { id: 'autoTarget', name: 'Auto-targeting', desc: 'Towers track and lead the nearest threat on their own.', max: 1, cost: () => 900, needs: 'towers', minStage: 6 },
   { id: 'rockets',    name: 'Rocket launcher', desc: 'Towers also fire exploding rockets. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(700 * Math.pow(1.6, l)), needs: 'towers', minStage: 8 },
@@ -253,7 +254,7 @@ export const MISSIONS = {
 };
 export const MISSION_SLOTS = 3;
 export function missionReward(type, stage) {
-  const raw = avgOreValue(stage) * 90 * MISSIONS[type].pay;
+  const raw = avgOreValue(stage) * 60 * MISSIONS[type].pay;
   const step = raw < 1000 ? 10 : raw < 10000 ? 100 : 1000;
   return Math.max(50, Math.round(raw / step) * step);
 }

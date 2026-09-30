@@ -197,7 +197,7 @@ function bossDown(x, y) {
   burst(x, y, 50, 380, ['#ff7ad9', '#8fe9ff', '#ffe9a8', '#ff6b3c'], 6, 300);
   G.parts.push({ ring: true, x, y: y + 30, r: 130, life: 0.6, max: 0.6 });
   G.banner = { text: 'BOSS DOWN  +1 STAR SHARD', life: 3.5, color: '#c58bff' };
-  for (let i = 0; i < 18; i++) dropRocks({ x, y, r: 60, vy: 0, ore: bestOre(G.cfg.n), kind: 'golden' }, 1, false);
+  for (let i = 0; i < 12; i++) dropRocks({ x, y, r: 60, vy: 0, ore: bestOre(G.cfg.n), kind: 'golden' }, 1, false);
 }
 
 function spawnMeteor() {

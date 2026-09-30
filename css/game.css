@@ -62,6 +62,14 @@ html, body {
 }
 #gestures b { color: var(--text); }
 
+#updateToast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 5; padding: 10px 16px; border-radius: 999px; border: 1px solid var(--good);
+  background: rgba(20, 50, 34, .95); color: var(--good); font: inherit; font-weight: 700; font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+}
+#updateToast[hidden] { display: none; }
+
 /* ---------- Overlays ---------- */
 #overlay {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;

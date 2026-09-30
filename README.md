@@ -15,7 +15,8 @@ Works offline after the first visit. On a phone, use the browser's **Add to Home
 and launch it from the icon once while online; after that it runs with no internet.
 
 **Publishing changes**: bump `CACHE` in `sw.js`, commit and push to `main`. Devices pick up
-the new version the next time the game is opened with internet (it applies on the launch after).
+the new version the next time the game is opened with internet; a "New version ready" prompt
+appears, and tapping it reloads into the new version.
 
 ## Run it locally
 

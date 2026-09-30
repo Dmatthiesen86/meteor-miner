@@ -41,6 +41,15 @@ requestAnimationFrame(frame);
 // Offline play: the service worker caches the whole game on first visit.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // A new version has taken over in the background: offer a reload rather than waiting for
+  // the launch after next. The prompt only shows outside a stage.
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; }     // first install, nothing to swap
+    const toast = document.getElementById('updateToast');
+    toast.hidden = false;
+    toast.onclick = () => location.reload();
+  });
 }
 
 // Handy in the browser console while tuning: G.profile.money = 5000, etc.
