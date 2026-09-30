@@ -35,12 +35,12 @@ python -m http.server 5174
 |---|---|---|
 | Run | drag anywhere on the screen | A / D or arrow keys |
 | Jump | tap anywhere (other thumb while running) | Space, W or up arrow |
-| Place / turn tower | tower button | T or E |
-| Use a supply | round buttons bottom left | 1 (nuke), 2 (time slow), 3 (shield cell) |
+| Place / turn tower | swipe up | T or E |
+| Use a supply | swipe down, then pick from the paused menu | 1 (nuke), 2 (time slow), 3 (shield cell) |
 | Pause / mute | buttons top right | P or Esc / M |
 
 There is no aiming. The blaster fires straight up; towers are planted firing straight up and
-step through up, left and right each time you press the tower button while standing on one.
+step through up, left and right each time you swipe up while standing on one.
 
 The blaster and towers fire on their own whenever meteors are in the sky.
 

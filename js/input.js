@@ -1,6 +1,7 @@
 // Touch + mouse + keyboard. The whole screen is one control surface:
 //   Touch / mouse:  drag anywhere to run, tap anywhere to jump. While one thumb is steering,
-//                   a tap from the other thumb jumps at once.
+//                   a tap from the other thumb jumps at once. Swipe up to place or turn a
+//                   tower, swipe down to open the supplies.
 //   Keyboard:       A/D or arrow keys to run, Space / W / Up to jump, T / E for towers,
 //                   1 / 2 / 3 for supplies.
 // There is no aiming: the blaster fires straight up.
@@ -16,7 +17,9 @@ export const input = {
 
 const STICK_RANGE = 36, STICK_DEAD = 0.18;
 const TAP_MS = 220, TAP_SLOP = 12;   // a touch this short and this still is a tap, not a drag
+const SWIPE_DIST = 55, SWIPE_MS = 260;   // a swipe is this far, mostly vertical, within this long
 const keys = new Set();
+const fingers = new Map();               // every pointer that is down: where its current stroke began
 let movePtr = null;
 // Finger count from touch events, which report every finger on the glass. Not every browser
 // sends them, so the count is only trusted once one has been seen.
@@ -41,6 +44,7 @@ function keyMove() {
  * switched away), and a steering thumb that never "lifts" would leave the miner running.
  */
 export function resetPointers() {
+  fingers.clear();
   movePtr = null;
   input.stick = null;
   input.move = keyMove();
@@ -52,17 +56,35 @@ export function initInput(canvas, handlers) {
     handlers.unlock();
     // This is the only finger on the glass, so any finger still on the books is a ghost.
     if (e.pointerType === 'touch' && touchEventsSeen && fingersDown === 0) resetPointers();
+    const p = logical(e);
+    fingers.set(e.pointerId, { x: p.x, y: p.y, t: performance.now(), swiped: false });
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
     // A second finger while the first is steering: jump at once.
     if (movePtr !== null) { input.jump = true; return; }
-    const p = logical(e);
     movePtr = e.pointerId;
     input.stick = { x0: p.x, x: p.x, y: p.y, startX: p.x, t: performance.now(), moved: false };
-    try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   });
 
+  // One swipe per touch. The start point slides forward so a thumb that has been steering
+  // for a while can still flick up or down.
+  const checkSwipe = (e, p) => {
+    const f = fingers.get(e.pointerId);
+    if (!f || f.swiped) return;
+    const now = performance.now();
+    if (now - f.t > SWIPE_MS) { f.x = p.x; f.y = p.y; f.t = now; return; }
+    const dx = p.x - f.x, dy = p.y - f.y;
+    if (Math.abs(dy) < SWIPE_DIST || Math.abs(dy) < Math.abs(dx) * 2) return;
+    f.swiped = true;
+    if (e.pointerId === movePtr) input.stick.moved = true;      // not also a tap
+    if (dy < 0) input.deploy = true;
+    else handlers.supplies();
+  };
+
   canvas.addEventListener('pointermove', e => {
+    const p = logical(e);
+    checkSwipe(e, p);
     if (e.pointerId !== movePtr) return;
-    const p = logical(e), s = input.stick;
+    const s = input.stick;
     s.x = p.x;
     if (Math.abs(p.x - s.startX) > TAP_SLOP) s.moved = true;
     // The anchor trails the finger so reversing direction never needs a long drag back.
@@ -72,11 +94,14 @@ export function initInput(canvas, handlers) {
   });
 
   const release = e => {
+    fingers.delete(e.pointerId);
     if (e.pointerId !== movePtr) return;
     // A lone quick tap can only be told from a drag once the finger lifts.
     const s = input.stick;
     if (e.type === 'pointerup' && !s.moved && performance.now() - s.t < TAP_MS) input.jump = true;
-    resetPointers();
+    movePtr = null;
+    input.stick = null;
+    input.move = keyMove();
   };
   // On window, not the canvas: the lift must count wherever it lands.
   window.addEventListener('pointerup', release);

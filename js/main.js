@@ -3,7 +3,7 @@ import { G } from './state.js';
 import { initInput } from './input.js';
 import { update, updateCamera } from './game.js';
 import { render } from './render.js';
-import { initUI, updateHUD, togglePause, toggleMute } from './ui.js';
+import { initUI, updateHUD, togglePause, toggleMute, showSupplies } from './ui.js';
 import { unlock } from './audio.js';
 
 const canvas = document.getElementById('game');
@@ -24,7 +24,7 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
 resize();
 
-initInput(canvas, { unlock, pause: togglePause, mute: toggleMute });
+initInput(canvas, { unlock, pause: togglePause, mute: toggleMute, supplies: showSupplies });
 initUI();
 
 let last = performance.now();

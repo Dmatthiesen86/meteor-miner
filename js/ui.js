@@ -1,4 +1,4 @@
-// DOM side of the game: HUD, tower button, and the menu / shop / pause / game-over panels.
+// DOM side of the game: HUD and the menu / shop / supplies / pause / game-over panels.
 import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, ITEMS, ITEM_CARRY, MISSIONS, PRESTIGE_STAGE, itemPrice, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
 import { G, save, newProfile, cargoValue, saleValue, cargoCount, boon } from './state.js';
 import { input, resetPointers } from './input.js';
@@ -6,7 +6,7 @@ import { startStage, towerInReach, fillMissions } from './game.js';
 import { sfx, setMuted, unlock } from './audio.js';
 
 const $ = id => document.getElementById(id);
-const overlay = $('overlay'), hud = $('hud'), towerBtn = $('towerBtn'), itemsBar = $('items');
+const overlay = $('overlay'), hud = $('hud');
 // Whole dollars below `compactFrom`, then 3 significant figures: $125K, $1.87M.
 function money(n, compactFrom = 100000) {
   if (n < compactFrom) return '$' + Math.round(n).toLocaleString();
@@ -29,8 +29,6 @@ function panel(html) {
   overlay.hidden = false;
   resetPointers();          // the panel now covers whatever the fingers were doing
   hud.hidden = true;
-  towerBtn.hidden = true;
-  itemsBar.hidden = true;
 }
 
 function on(id, fn) {
@@ -55,9 +53,9 @@ export function showMenu() {
       <b>Run</b> - drag anywhere on the screen, or A / D / arrow keys.<br>
       <b>Jump</b> - tap anywhere, or Space / W. While running, tap with your other thumb. Bigger maps have boulders to hop over.<br>
       <b>Blaster</b> - fires straight up on its own. Stand under what you want to hit.<br>
-      <b>Towers</b> - tap the tower button (or T) to plant one firing straight up. Stand on it and tap again to turn it left or right.<br>
+      <b>Towers</b> - swipe up (or T) to plant one firing straight up. Stand on it and swipe up again to turn it left or right.<br>
       <b>UFOs</b> shoot back on stages 5, 15, 25... and a <b>boss</b> arrives every 10th stage.<br>
-      <b>Supplies</b> - nuke, time slow and shield cell. Buy them at the trading post, fire them with the buttons bottom left (or 1 / 2 / 3).<br>
+      <b>Supplies</b> - nuke, time slow and shield cell. Buy them at the trading post. Swipe down to pause and pick one (or press 1 / 2 / 3).<br>
       <b>Red marks</b> on the ground show where a meteor will land and how wide the blast is.
     </div>
     ${G.hasSave ? `<button class="btn primary" id="continueBtn">Continue - Stage ${p.stage}</button>` : ''}
@@ -293,6 +291,31 @@ function showPerks() {
   on('backBtn', () => showShop());
 }
 
+// Swipe down: the game freezes and the supplies show as three big buttons, so picking one
+// is never a fiddly tap under fire.
+export function showSupplies() {
+  if (G.mode !== 'playing') return;
+  const items = G.profile.items;
+  if (!ITEMS.some(it => items[it.id])) { sfx.deny(); return; }
+  G.mode = 'supplies';
+  const back = () => { overlay.hidden = true; hud.hidden = false; G.mode = 'playing'; };
+  panel(`
+    <h2>Supplies</h2>
+    ${ITEMS.map(it => `
+      <button class="boon-card supply-${it.id}" data-use="${it.id}" ${items[it.id] ? '' : 'disabled'}>
+        <span class="name">${it.name}<span class="lvl">&times; ${items[it.id]}</span></span>
+        <span class="desc">${it.desc}</span>
+      </button>`).join('')}
+    <button class="btn" id="cancelBtn">Back to the game</button>
+  `);
+  overlay.querySelectorAll('[data-use]').forEach(btn => btn.addEventListener('click', () => {
+    unlock();
+    back();
+    input.use = btn.dataset.use;
+  }));
+  on('cancelBtn', back);
+}
+
 export function togglePause() {
   if (G.mode === 'playing') {
     G.mode = 'paused';
@@ -352,20 +375,15 @@ export function updateHUD() {
   $('muteBtn').classList.toggle('off', prof.muted);
   $('progress').style.width = (Math.min(1, G.time / G.cfg.duration) * 100).toFixed(1) + '%';
 
-  let anyItem = false;
-  for (const it of ITEMS) {
-    const n = prof.items[it.id], btn = itemsBar.querySelector(`[data-use="${it.id}"]`);
-    btn.hidden = n === 0;
-    if (n) { anyItem = true; setText('use-' + it.id, `${it.label}<b>${n}</b>`); }
+  // One line that both counts what is in the pack and reminds which swipe uses it.
+  const parts = [];
+  if (prof.up.towers > 0) {
+    const turn = !prof.up.autoTarget && !!towerInReach();
+    parts.push(turn ? '▲ swipe up: turn tower' : `▲ swipe up: tower <b>${G.towersLeft}</b>`);
   }
-  itemsBar.hidden = !anyItem;
-  const hasTowers = prof.up.towers > 0;
-  towerBtn.hidden = !hasTowers;
-  if (hasTowers) {
-    const reaim = !prof.up.autoTarget && !!towerInReach();
-    setText('towerBtn', reaim ? 'Turn tower' : `Place tower · ${G.towersLeft}`);
-    towerBtn.classList.toggle('empty', !reaim && G.towersLeft === 0);
-  }
+  const pack = ITEMS.filter(it => prof.items[it.id]).map(it => `${it.label} <b>${prof.items[it.id]}</b>`);
+  if (pack.length) parts.push('▼ swipe down: ' + pack.join(' · '));
+  setText('gestures', parts.join('&nbsp;&nbsp;&nbsp;'));
 }
 
 export function initUI() {
@@ -374,17 +392,6 @@ export function initUI() {
   setMuted(G.profile.muted);
   on('pauseBtn', togglePause);
   on('muteBtn', toggleMute);
-  towerBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    unlock();
-    input.deploy = true;
-  });
-  itemsBar.innerHTML = ITEMS.map(it => `<button id="use-${it.id}" data-use="${it.id}" class="use-${it.id}" hidden></button>`).join('');
-  itemsBar.querySelectorAll('button').forEach(btn => btn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    unlock();
-    input.use = btn.dataset.use;
-  }));
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && G.mode === 'playing') togglePause();
   });

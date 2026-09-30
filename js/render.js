@@ -374,14 +374,14 @@ function drawControls(ctx, vw) {
     ctx.fillText('◀  drag anywhere to run  ▶', vw / 2, GROUND_Y + 58);
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, .35)';
-    ctx.fillText('tap anywhere to jump', vw / 2, GROUND_Y + 80);
+    ctx.fillText('tap anywhere to jump  ·  swipe up for a tower', vw / 2, GROUND_Y + 80);
     ctx.fillText('keyboard: A / D and Space', vw / 2, GROUND_Y + 100);
   }
 }
 
 // Boss name and health across the top of the screen.
 function drawBossBar(ctx, vw) {
-  const b = G.boss, w = vw - 60, x = 30, y = 84;
+  const b = G.boss, w = vw - 60, x = 30, y = 98;
   ctx.fillStyle = 'rgba(0, 0, 0, .6)';
   ctx.fillRect(x - 2, y - 2, w + 4, 12);
   ctx.fillStyle = '#ff6b5e';
@@ -396,7 +396,7 @@ function drawBossBar(ctx, vw) {
 function drawMinimap(ctx, vw, camX) {
   const W = G.worldW;
   if (W <= vw + 1) return;
-  const x0 = 16, w = vw - 32, y = 62, k = w / W;
+  const x0 = 16, w = vw - 32, y = 78, k = w / W;
   ctx.fillStyle = 'rgba(255, 255, 255, .12)';
   ctx.fillRect(x0, y, w, 5);
   ctx.strokeStyle = 'rgba(255, 255, 255, .5)';
@@ -515,7 +515,7 @@ export function render(ctx, time) {
       ctx.fillStyle = G.banner.color;
       ctx.font = `800 ${Math.min(24, Math.floor(vw * 1.75 / G.banner.text.length))}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(G.banner.text, vw / 2, G.boss ? 140 : 110);
+      ctx.fillText(G.banner.text, vw / 2, G.boss ? 154 : 126);
       ctx.globalAlpha = 1;
     }
     if (G.mode === 'clearing') {

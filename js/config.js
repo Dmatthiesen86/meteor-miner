@@ -187,7 +187,7 @@ export const SHOP = [
   { id: 'gunRockets', name: 'Blaster rockets', desc: 'Blaster also fires an exploding rocket every 2.5s. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(600 * Math.pow(1.6, l)), needs: 'gun', minStage: 6 },
 
   { group: 'Towers' },
-  { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Fires straight up; stand on it and tap the tower button to turn it.', max: 6, cost: l => 120 + 80 * l },
+  { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Swipe up to plant it firing straight up; swipe up again on it to turn it.', max: 6, cost: l => 120 + 80 * l },
   { id: 'towerDamage', name: 'Tower damage',  desc: '+1 damage per shot for every tower.',           max: 10, cost: l => Math.round(80 * Math.pow(1.55, l)), needs: 'towers', endless: true },
   { id: 'towerRate',  name: 'Tower fire rate', desc: 'Every tower shoots 20% faster.',               max: 8,  cost: l => Math.round(90 * Math.pow(1.5, l)),  needs: 'towers' },
   { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.6, l)),  needs: 'towers', endless: true },
