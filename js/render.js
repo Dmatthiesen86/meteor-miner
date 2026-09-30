@@ -339,6 +339,19 @@ function drawAimLine(ctx, p) {
 function drawParticles(ctx) {
   for (const q of G.parts) {
     const k = q.life / q.max;
+    if (q.bolt) {                                   // chain lightning: a jagged line that fades fast
+      ctx.strokeStyle = `rgba(190, 230, 255, ${k})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y);
+      for (let i = 1; i < 4; i++) {
+        const t = i / 4;
+        ctx.lineTo(q.x + (q.x2 - q.x) * t + (Math.random() - 0.5) * 14, q.y + (q.y2 - q.y) * t + (Math.random() - 0.5) * 14);
+      }
+      ctx.lineTo(q.x2, q.y2);
+      ctx.stroke();
+      continue;
+    }
     if (q.ring) {
       ctx.strokeStyle = `rgba(255, 190, 120, ${k * 0.8})`;
       ctx.lineWidth = 3 * k + 1;

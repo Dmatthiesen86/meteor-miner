@@ -1,6 +1,6 @@
 // The simulation: player, meteors, rocks, bullets, towers and stage flow.
-import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, METEOR_STYLE, BOONS, BOON_EVERY, MISSIONS, MISSION_SLOTS, stageConfig, pickKind, bestOre, missionReward } from './config.js';
-import { G, save, emptyCargo, cargoCount, boon } from './state.js';
+import { GROUND_Y, ORES, ORE_KEYS, REPAIR_SECONDS, REGEN_SECONDS, DARES, METEOR_STYLE, BOONS, BOON_EVERY, MISSIONS, MISSION_SLOTS, stageConfig, pickKind, bestOre, missionReward } from './config.js';
+import { G, save, emptyCargo, cargoCount, saleValue, boon } from './state.js';
 import { input, resetPointers } from './input.js';
 import { sfx } from './audio.js';
 
@@ -28,6 +28,9 @@ const NUKE_BOSS_SHARE = 0.2, NUKE_UFO_SHARE = 0.5;   // share of full health a n
 const UP = -Math.PI / 2;
 // The directions a tower steps through each time it is turned: up, up-left, up-right.
 const TOWER_ANGLES = [UP, UP - 0.7, UP + 0.7];
+const CRIT_CHANCE = 0.06, CRIT_MULT = 3;
+const CHAIN_RANGE = 110;
+const DODGE_HEIGHT = 20;             // how far off the ground Blast boots need you to be
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -49,12 +52,22 @@ export const maxHearts = up => 3 + up.armor + boon('heart');
 
 export function startStage() {
   const p = G.profile, cfg = stageConfig(p.stage, p.expeditions);
+  // the dare chosen at the trading post, if any
+  const dare = cfg.event && cfg.event.id === 'bonus' ? null : DARES.find(d => d.id === p.dare) || null;
+  G.dare = dare;
+  if (dare && dare.id === 'double') cfg.interval /= 2;
+  if (dare && dare.id === 'fast') { cfg.speedMin *= 1.35; cfg.speedMax *= 1.35; }
+  const fragile = dare && dare.id === 'fragile';
   G.cfg = cfg;
   G.worldW = cfg.worldW;
-  G.player = { x: cfg.worldW / 2, vx: 0, hp: maxHearts(p.up), maxHp: maxHearts(p.up), shield: p.up.shield, inv: 0, walk: 0, face: 1, jy: 0, vjump: 0 };
+  G.player = {
+    x: cfg.worldW / 2, vx: 0, hp: fragile ? 1 : maxHearts(p.up), maxHp: maxHearts(p.up), shield: fragile ? 0 : p.up.shield,
+    inv: 0, walk: 0, face: 1, jy: 0, vjump: 0, airJumped: false, regenT: 0, windUsed: false,
+  };
   G.meteors = []; G.ufos = []; G.shots = []; G.rocks = []; G.bullets = []; G.towers = []; G.parts = []; G.floaters = []; G.patches = [];
   G.obstacles = makeObstacles(cfg);
-  G.towersLeft = p.up.towers;
+  G.towersBenched = dare && dare.id === 'notowers' ? p.up.towers : 0;
+  G.towersLeft = p.up.towers - G.towersBenched;
   G.towersStart = p.up.towers;
   G.haul = emptyCargo();
   G.stats = { destroyed: 0, landed: 0, ufos: 0, boss: false, golden: 0, hurt: false };
@@ -268,6 +281,14 @@ function hurtPlayer() {
   p.inv = 1.4;
   G.shake = Math.max(G.shake, 14);
   burst(p.x, GROUND_Y - 20, 14, 220, ['#ff6b5e', '#ffd166'], 4, 500);
+  if (p.hp <= 0 && G.profile.up.secondWind && !p.windUsed) {
+    p.windUsed = true;
+    p.hp = 1;
+    p.inv = 2.5;
+    G.banner = { text: 'SECOND WIND', life: 2, color: '#6fe39a' };
+    sfx.shield();
+    return;
+  }
   if (p.hp <= 0) {
     sfx.dead();
     G.mode = 'dead';
@@ -301,7 +322,12 @@ function impact(m) {
   const hits = m.kind === 'titan' ? 2 : 1;                 // a landed titan costs double
   const reach = (blast + 8) * Math.max(0.4, 1 - 0.12 * boon('dampers'));
   if (Math.abs(G.player.x - m.x) < reach) {
-    for (let i = 0; i < hits; i++) { hurtPlayer(); if (i < hits - 1) G.player.inv = 0; }
+    // Blast boots: the shockwave passes under an airborne miner (m.y is still high on a direct hit).
+    if (G.profile.up.airDodge && G.player.jy > DODGE_HEIGHT && m.y + m.r * 0.8 >= GROUND_Y) {
+      if (G.player.inv <= 0) floater(G.player.x, GROUND_Y - PLAYER_H - 14 - G.player.jy, 'Dodged', '#6fe39a');
+    } else {
+      for (let i = 0; i < hits; i++) { hurtPlayer(); if (i < hits - 1) G.player.inv = 0; }
+    }
   }
   for (const t of G.towers) {
     if (Math.abs(t.x - m.x) < blast * 0.8) for (let i = 0; i < hits && !t.dead; i++) damageTower(t);
@@ -393,7 +419,43 @@ function damageUfo(u, dmg, bx, by) {
 }
 
 function fire(x, y, angle, dmg, color) {
-  G.bullets.push({ x, y, vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED, dmg, color, pierce: boon('pierce'), hits: null, dead: false });
+  const b = { x, y, vx: Math.cos(angle) * BULLET_SPEED, vy: Math.sin(angle) * BULLET_SPEED, dmg, color, pierce: boon('pierce'), hits: null, gun: false, dead: false };
+  G.bullets.push(b);
+  return b;
+}
+
+// Bullet damage to a meteor, with the armored ones shrugging most of it off.
+function strike(m, dmg, x, y) {
+  damageMeteor(m, m.kind === 'iron' ? dmg * IRON_BULLET_FACTOR : dmg, x, y);
+}
+
+// Explosive rounds and chain lightning: what a blaster hit does to the meteors around it.
+function spreadHit(hit, dmg, x, y) {
+  const up = G.profile.up, n = G.meteors.length;          // pieces that split off are spared
+  if (up.explosive) {
+    const reach = 22 + 6 * up.explosive;
+    G.parts.push({ ring: true, x, y: y + reach * 0.35, r: reach, life: 0.2, max: 0.2 });
+    for (let i = 0; i < n; i++) {
+      const m = G.meteors[i];
+      if (!m.dead && m !== hit && Math.hypot(m.x - x, m.y - y) < reach + m.r) strike(m, dmg * 0.5, m.x, m.y);
+    }
+  }
+  let from = hit;
+  const zapped = [hit];
+  for (let k = 0; k < up.chain; k++) {
+    let next = null, best = CHAIN_RANGE;
+    for (let i = 0; i < n; i++) {
+      const m = G.meteors[i];
+      if (m.dead || zapped.includes(m)) continue;
+      const d = Math.hypot(m.x - from.x, m.y - from.y) - m.r;
+      if (d < best) { best = d; next = m; }
+    }
+    if (!next) break;
+    G.parts.push({ bolt: true, x: from.x, y: from.y, x2: next.x, y2: next.y, life: 0.15, max: 0.15 });
+    zapped.push(next);
+    strike(next, dmg * 0.5, next.x, next.y);
+    from = next;
+  }
 }
 
 function fireRocket(x, y, angle, stats, homing) {
@@ -569,7 +631,7 @@ function finishStage() {
   G.rocks = [];
   for (const k of ORE_KEYS) p.cargo[k] += G.haul[k];
   // destroyed towers are gone for good, except the ones insurance pays for
-  const survived = G.towersLeft + G.towers.length;
+  const survived = G.towersLeft + G.towers.length + G.towersBenched;
   const lost = G.towersStart - survived;
   const replaced = Math.min(lost, p.up.towerInsurance);
   p.up.towers = survived + replaced;
@@ -577,9 +639,12 @@ function finishStage() {
   if (bossBeaten) p.shards++;                         // paid on clearing, so dying can't farm it
   if (p.stage % BOON_EVERY === 0) p.pendingBoon = offerBoons(p);
   const missions = scoreMissions(p, bossBeaten);
+  const dare = G.dare ? { name: G.dare.name, bonus: Math.round(saleValue(G.haul) * G.dare.pay) } : null;
+  if (dare) p.money += dare.bonus;
+  p.dare = null;
   const summary = {
     stage: p.stage, haul: G.haul, destroyed: G.stats.destroyed, landed: G.stats.landed, ufos: G.stats.ufos,
-    hp: G.player.hp, lost, replaced, missions, event: G.cfg.event, boss: G.cfg.boss ? { name: G.cfg.boss.name, beaten: bossBeaten } : null,
+    hp: G.player.hp, lost, replaced, missions, dare, event: G.cfg.event, boss: G.cfg.boss ? { name: G.cfg.boss.name, beaten: bossBeaten } : null,
   };
   p.stage++;
   fillMissions(p);
@@ -613,11 +678,17 @@ export function update(dt) {
   if (input.jump) {
     input.jump = false;
     if (p.jy === 0 && !clearing) { p.vjump = JUMP_SPEED; sfx.jump(); }
+    else if (p.jy > 0 && up.doubleJump && !p.airJumped) {
+      p.airJumped = true;
+      p.vjump = JUMP_SPEED * 0.9;
+      sfx.jump();
+      burst(p.x, GROUND_Y - p.jy, 8, 120, ['#d8dcef', '#8a93b8'], 3, 200);
+    }
   }
   if (p.vjump !== 0 || p.jy > 0) {
     p.jy += p.vjump * dt;
     p.vjump -= JUMP_GRAVITY * planet.gravity * dt;
-    if (p.jy <= 0) { p.jy = 0; p.vjump = 0; }
+    if (p.jy <= 0) { p.jy = 0; p.vjump = 0; p.airJumped = false; }
   }
   // boulders block the way unless the miner is above them
   for (const o of G.obstacles) {
@@ -634,6 +705,14 @@ export function update(dt) {
     G.moved = true;
   }
   p.inv = Math.max(0, p.inv - dt);
+  if (up.regen && p.hp < p.maxHp && !clearing) {
+    p.regenT += dt;
+    if (p.regenT >= REGEN_SECONDS[up.regen - 1]) {
+      p.regenT = 0;
+      p.hp++;
+      floater(p.x, GROUND_Y - PLAYER_H - 14 - p.jy, '+1 heart', '#ff6b5e');
+    }
+  }
   for (const q of G.patches) {
     q.life -= dt;
     if (q.kind !== 'fire') continue;
@@ -742,7 +821,7 @@ export function update(dt) {
         const shots = 1 + boon('twin');
         for (let i = 0; i < shots; i++) {
           const a = G.aim + (i - (shots - 1) / 2) * TWIN_SPREAD;
-          fire(p.x + Math.cos(a) * 16, gunY + Math.sin(a) * 16, a, g.dmg, '#ffe9a8');
+          fire(p.x + Math.cos(a) * 16, gunY + Math.sin(a) * 16, a, g.dmg, '#ffe9a8').gun = true;
         }
         sfx.shoot();
       }
@@ -826,8 +905,14 @@ export function update(dt) {
     }
     if (hit) {
       if (b.blast) { b.dead = true; explode(b); continue; }
-      if (isUfo) damageUfo(hit, b.dmg, b.x, b.y);
-      else damageMeteor(hit, hit.kind === 'iron' ? b.dmg * IRON_BULLET_FACTOR : b.dmg, b.x, b.y);
+      let dmg = b.dmg;
+      if (b.gun && Math.random() < CRIT_CHANCE * up.crit) {
+        dmg *= CRIT_MULT;
+        floater(b.x, b.y - 8, 'CRIT', '#ffd166');
+      }
+      if (isUfo) damageUfo(hit, dmg, b.x, b.y);
+      else strike(hit, dmg, b.x, b.y);
+      if (b.gun && (up.explosive || up.chain)) spreadHit(hit, dmg, b.x, b.y);
       // Piercing rounds carry on, but never hit the same target twice.
       if (b.pierce > 0) { b.pierce--; (b.hits ||= []).push(hit); }
       else b.dead = true;
@@ -906,7 +991,7 @@ export function update(dt) {
   // particles and floating text
   for (const q of G.parts) {
     q.life -= dt;
-    if (q.ring) continue;
+    if (q.ring || q.bolt) continue;
     q.vy += q.grav * dt;
     q.x += q.vx * dt;
     q.y += q.vy * dt;

@@ -69,6 +69,13 @@ The blaster and towers fire on their own whenever meteors are in the sky.
 - **Bosses** arrive on every 10th stage, taking turns: the Mothership (fires spreads, drops
   meteors, escapes 45 s after the shower) and the Titan meteor (falls slowly; costs 2 hearts if
   it lands). Beating one and clearing the stage pays 1 star shard.
+- **Miner gear**: Double jump (stage 3), Med kit (4, heals over time), Blast boots (6, ground
+  blasts miss you in the air), Second wind (8, survive one fatal hit per stage).
+- **Blaster mods**: Critical hits (stage 4), Explosive rounds (7), Chain lightning (9). They
+  apply to blaster bullets only, not towers or rockets.
+- **Dares**: optionally pick a handicap for the next stage at the trading post. Clearing it
+  pays a share of that stage's rock value as extra cash. A dare stays picked if you die and
+  retry, and is never offered on a bonus round.
 - **Supplies**: nuke, time slow and shield cell are one-use items bought at the trading post
   (carry up to 3 of each). Used items are gone even if you die.
 - **Event stages** turn up at random: meteor storm (short, dense, double rocks), gold rush

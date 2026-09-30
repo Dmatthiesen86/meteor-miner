@@ -11,10 +11,11 @@ export function newProfile() {
     best: 1,
     money: 0,
     cargo: emptyCargo(),
-    up: { gun: 0, damage: 0, rate: 0, gunAuto: 0, gunRockets: 0, shield: 0, towers: 0, towerDamage: 0, towerRate: 0, towerArmor: 0, towerShield: 0, towerRepair: 0, towerInsurance: 0, autoTarget: 0, rockets: 0, homing: 0, boots: 0, magnet: 0, armor: 0 },
+    up: { gun: 0, damage: 0, rate: 0, gunAuto: 0, gunRockets: 0, crit: 0, explosive: 0, chain: 0, doubleJump: 0, airDodge: 0, regen: 0, secondWind: 0, shield: 0, towers: 0, towerDamage: 0, towerRate: 0, towerArmor: 0, towerShield: 0, towerRepair: 0, towerInsurance: 0, autoTarget: 0, rockets: 0, homing: 0, boots: 0, magnet: 0, armor: 0 },
     muted: false,
     items: { nuke: 0, slow: 0, cell: 0 },   // supplies in the pack
     missions: [],            // { type, goal, progress, reward }
+    dare: null,              // id of the dare picked for the next stage
     boons: {},               // bonus picks held this run: id -> how many
     pendingBoon: null,       // the 3 ids on offer, until one is chosen
     // permanent: survive both "New game" and a new expedition
@@ -75,6 +76,7 @@ export const G = {
   slowT: 0,                // seconds of Time slow left
   flashT: 0,               // white-out after a nuke
   boss: null,              // the boss in play, for the health bar
+  dare: null,              // the dare in force this stage
   wind: 0,
   banner: null,
   patches: [],             // ice and fire left on the ground by special meteors

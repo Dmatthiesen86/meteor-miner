@@ -1,5 +1,5 @@
 // DOM side of the game: HUD and the menu / shop / supplies / pause / game-over panels.
-import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, ITEMS, ITEM_CARRY, MISSIONS, PRESTIGE_STAGE, itemPrice, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
+import { ORES, ORE_KEYS, SHOP, PERKS, BOONS, ITEMS, ITEM_CARRY, MISSIONS, DARES, PRESTIGE_STAGE, itemPrice, START_CASH_PER_LEVEL, stageConfig, priceOf, perkCost, shardsFor } from './config.js';
 import { G, save, newProfile, cargoValue, saleValue, cargoCount, boon } from './state.js';
 import { input, resetPointers } from './input.js';
 import { startStage, towerInReach, fillMissions } from './game.js';
@@ -51,7 +51,7 @@ export function showMenu() {
     <p class="tag">Dodge the meteors. Grab the rocks. Sell. Gear up.</p>
     <div class="how">
       <b>Run</b> - drag anywhere on the screen, or A / D / arrow keys.<br>
-      <b>Jump</b> - tap anywhere, or Space / W. While running, tap with your other thumb. Bigger maps have boulders to hop over.<br>
+      <b>Jump</b> - tap anywhere, or Space / W. With Double jump, tap again in the air. While running, tap with your other thumb. Bigger maps have boulders to hop over.<br>
       <b>Blaster</b> - fires straight up on its own. Stand under what you want to hit.<br>
       <b>Towers</b> - swipe up (or T) to plant one firing straight up. Stand on it and swipe up again to turn it left or right.<br>
       <b>UFOs</b> shoot back on stages 5, 15, 25... and a <b>boss</b> arrives every 10th stage.<br>
@@ -129,6 +129,10 @@ export function showShop(summary) {
   const next = stageConfig(p.stage, p.expeditions);
   fillMissions(p);
   const shards = shardsFor(p.stage);
+  // dares that make sense for the next stage; a stale pick is dropped
+  const dares = next.event && next.event.id === 'bonus' ? [] : DARES.filter(d => !d.needs || up[d.needs]);
+  const dare = dares.find(d => d.id === p.dare) || null;
+  if (!dare) p.dare = null;
 
   const items = SHOP.map(it => {
     if (it.group) return `<div class="shop-group">${it.group}</div>`;
@@ -164,6 +168,7 @@ export function showShop(summary) {
         ${summary.boss ? `<span>${summary.boss.name}</span><span>${summary.boss.beaten ? 'Defeated · +1 ★' : 'Got away'}</span>` : ''}
         ${summary.lost ? `<span>Towers destroyed</span><span>${summary.lost}${summary.replaced ? ` (${summary.replaced} replaced by insurance)` : ''}</span>` : ''}
       </div>
+      ${summary.dare ? `<p class="tag mission-done">Dare complete: ${summary.dare.name} · +${money(summary.dare.bonus)}</p>` : ''}
       ${summary.missions.map(m => `<p class="tag mission-done">Mission complete: ${m.text} · +${money(m.reward)}</p>`).join('')}` : ''}
     <div class="wallet"><span>Cash</span><span class="cash">${money(p.money)}</span></div>
     <div class="cargo-box">
@@ -195,7 +200,15 @@ export function showShop(summary) {
         <button data-item="${it.id}" ${full || p.money < cost ? 'disabled' : ''}>${full ? 'FULL' : money(cost)}</button>
       </div>`;
     }).join('')}
-    <button class="btn primary" id="goBtn">Start stage ${p.stage}</button>
+    ${dares.length ? `
+    <div class="shop-group">Dare (optional)</div>
+    <p class="tag" style="text-align:left;margin:0 0 6px;font-size:12.5px">Make the next stage harder. Clear it and get extra cash on top of your rocks.</p>
+    ${dares.map(d => `
+      <button class="dare ${dare === d ? 'on' : ''}" data-dare="${d.id}">
+        <span class="name">${d.name}</span><span class="pay">+${Math.round(d.pay * 100)}%</span>
+        <span class="desc">${d.desc}</span>
+      </button>`).join('')}` : ''}
+    <button class="btn primary" id="goBtn">Start stage ${p.stage}${dare ? ` · ${dare.name}` : ''}</button>
     <p class="tag" style="margin:8px 0 0;font-size:12.5px">${next.planet.name} · Map width ${next.worldW} · shower lasts ${next.duration}s${next.obstacles ? ` · ${next.obstacles} boulder${next.obstacles > 1 ? 's' : ''} to jump` : ''}</p>
     ${next.event ? `<p class="tag event-warn">${next.event.name}! ${next.event.tip}</p>` : ''}
     ${next.newPlanet ? `<p class="tag planet-warn">New planet: ${next.planet.name}. ${next.planet.tip}</p>` : ''}
@@ -248,6 +261,14 @@ export function showShop(summary) {
     p.items[it.id]++;
     save();
     sfx.buy();
+    const scroll = overlay.firstElementChild.scrollTop;
+    showShop(summary);
+    overlay.firstElementChild.scrollTop = scroll;
+  }));
+  overlay.querySelectorAll('[data-dare]').forEach(btn => btn.addEventListener('click', () => {
+    unlock();
+    p.dare = p.dare === btn.dataset.dare ? null : btn.dataset.dare;
+    save();
     const scroll = overlay.firstElementChild.scrollTop;
     showShop(summary);
     overlay.firstElementChild.scrollTop = scroll;
@@ -368,7 +389,7 @@ export function updateHUD() {
   setText('hearts', (p.maxHp > 5 ? `♥<span class="num"> ${Math.max(0, p.hp)}/${p.maxHp}</span>`
     : '♥'.repeat(Math.max(0, p.hp)) + `<span class="lost">${'♥'.repeat(Math.max(0, p.maxHp - p.hp))}</span>`)
     + (p.shield > 0 ? `<span class="shield">◆<span class="num">${p.shield}</span></span>` : ''));
-  setText('stage', `Stage ${prof.stage} · ${G.cfg.planet.name}`);
+  setText('stage', `Stage ${prof.stage} · ${G.cfg.planet.name}${G.dare ? ` · ${G.dare.name} +${Math.round(G.dare.pay * 100)}%` : ''}`);
   setText('money', short(prof.money));
   setText('cargo', `${cargoCount(G.haul)} · ${short(saleValue(G.haul))}`);
   setText('muteBtn', '♪');

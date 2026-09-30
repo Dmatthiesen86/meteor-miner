@@ -178,6 +178,10 @@ export const SHOP = [
   { id: 'magnet',     name: 'Magnet',         desc: 'Pull in rocks from further away.',              max: 6,  cost: l => Math.round(35 * Math.pow(1.6, l)) },
   { id: 'armor',      name: 'Armor',          desc: '+1 heart.',                                     max: 5,  cost: l => Math.round(80 * Math.pow(1.8, l)), endless: true },
   { id: 'shield',     name: 'Shield',         desc: 'Absorbs 1 hit per level. Recharges every stage.', max: 5, cost: l => Math.round(100 * Math.pow(1.7, l)) },
+  { id: 'doubleJump', name: 'Double jump',   desc: 'Tap again in the air for a second jump.',        max: 1, cost: () => 400,  minStage: 3 },
+  { id: 'airDodge',   name: 'Blast boots',   desc: 'Ground blasts miss you while you are in the air. Direct hits still count.', max: 1, cost: () => 900, minStage: 6 },
+  { id: 'regen',      name: 'Med kit',       desc: l => `Heal 1 heart every ${REGEN_SECONDS[Math.min(l, REGEN_SECONDS.length - 1)]}s.`, max: 4, cost: l => Math.round(300 * Math.pow(1.8, l)), minStage: 4 },
+  { id: 'secondWind', name: 'Second wind',   desc: 'Once per stage, a hit that would finish you leaves 1 heart instead.', max: 1, cost: () => 1500, minStage: 8 },
 
   { group: 'Blaster' },
   { id: 'gun',        name: 'Blaster',        desc: 'Fires straight up, non-stop.',                  max: 1,  cost: () => 50 },
@@ -185,6 +189,9 @@ export const SHOP = [
   { id: 'rate',       name: 'Blaster fire rate', desc: 'Blaster shoots 20% faster.',                 max: 8,  cost: l => Math.round(70 * Math.pow(1.5, l)),  needs: 'gun' },
   { id: 'gunAuto',    name: 'Blaster auto-targeting', desc: 'Blaster swings to track the nearest threat instead of only firing straight up.', max: 1, cost: () => 800, needs: 'gun', minStage: 6 },
   { id: 'gunRockets', name: 'Blaster rockets', desc: 'Blaster also fires an exploding rocket every 2.5s. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(600 * Math.pow(1.6, l)), needs: 'gun', minStage: 6 },
+  { id: 'crit',       name: 'Critical hits', desc: '+6% chance for a blaster bullet to hit for triple damage.', max: 8, cost: l => Math.round(250 * Math.pow(1.5, l)), needs: 'gun', minStage: 4 },
+  { id: 'explosive',  name: 'Explosive rounds', desc: 'Blaster bullets burst, hitting everything nearby for half damage. Each level: wider burst.', max: 5, cost: l => Math.round(500 * Math.pow(1.6, l)), needs: 'gun', minStage: 7 },
+  { id: 'chain',      name: 'Chain lightning', desc: 'Each blaster hit arcs to 1 more nearby meteor per level for half damage.', max: 4, cost: l => Math.round(700 * Math.pow(1.7, l)), needs: 'gun', minStage: 9 },
 
   { group: 'Towers' },
   { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Swipe up to plant it firing straight up; swipe up again on it to turn it.', max: 6, cost: l => 120 + 80 * l },
@@ -206,8 +213,21 @@ export function priceOf(item, level) {
   return Math.round(item.cost(item.max) * Math.pow(1.22, level - item.max));
 }
 
+// Seconds per heart healed at each level of the med kit (index = level - 1).
+export const REGEN_SECONDS = [40, 30, 22, 15];
+
 // Seconds per point of tower repair at each level of the repair upgrade (index = level - 1).
 export const REPAIR_SECONDS = [18, 15, 12, 9, 6];
+
+// ---------- dares ----------
+// An optional handicap chosen at the trading post for one stage. Clearing the stage pays
+// `pay` times the value of the rocks collected, as extra cash. Not offered on bonus rounds.
+export const DARES = [
+  { id: 'double',   name: 'Downpour',    desc: 'Twice as many meteors.',            pay: 0.5 },
+  { id: 'fast',     name: 'Fast fall',   desc: 'Meteors fall 35% faster.',          pay: 0.4 },
+  { id: 'fragile',  name: 'Glass miner', desc: 'Start with 1 heart and no shield.', pay: 0.75 },
+  { id: 'notowers', name: 'Solo',        desc: 'Your towers stay in the pack.',     pay: 0.3, needs: 'towers' },
+];
 
 // ---------- supplies ----------
 // One-use items, bought at the trading post and fired with a button during a stage.
