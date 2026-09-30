@@ -52,10 +52,10 @@ export function showMenu() {
     <h1>Meteor Miner</h1>
     <p class="tag">Dodge the meteors. Grab the rocks. Sell. Gear up.</p>
     <div class="how">
-      <b>Run</b> - drag along the bottom strip, or A / D / arrow keys.<br>
-      <b>Jump</b> - tap anywhere along the bottom strip, or Space / W. While running, tap with your other thumb. Bigger maps have boulders to hop over.<br>
-      <b>Aim</b> - touch the sky or move the mouse. Your blaster fires on its own.<br>
-      <b>Towers</b> - aim, then tap the tower button (or T) to plant one. Stand on it and tap again to re-aim.<br>
+      <b>Run</b> - drag anywhere on the screen, or A / D / arrow keys.<br>
+      <b>Jump</b> - tap anywhere, or Space / W. While running, tap with your other thumb. Bigger maps have boulders to hop over.<br>
+      <b>Blaster</b> - fires straight up on its own. Stand under what you want to hit.<br>
+      <b>Towers</b> - tap the tower button (or T) to plant one firing straight up. Stand on it and tap again to turn it left or right.<br>
       <b>UFOs</b> shoot back on stages 5, 15, 25... and a <b>boss</b> arrives every 10th stage.<br>
       <b>Supplies</b> - nuke, time slow and shield cell. Buy them at the trading post, fire them with the buttons bottom left (or 1 / 2 / 3).<br>
       <b>Red marks</b> on the ground show where a meteor will land and how wide the blast is.
@@ -363,7 +363,7 @@ export function updateHUD() {
   towerBtn.hidden = !hasTowers;
   if (hasTowers) {
     const reaim = !prof.up.autoTarget && !!towerInReach();
-    setText('towerBtn', reaim ? 'Re-aim tower' : `Place tower · ${G.towersLeft}`);
+    setText('towerBtn', reaim ? 'Turn tower' : `Place tower · ${G.towersLeft}`);
     towerBtn.classList.toggle('empty', !reaim && G.towersLeft === 0);
   }
 }

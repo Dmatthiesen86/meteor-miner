@@ -31,14 +31,16 @@ python -m http.server 5174
 
 ## Controls
 
-| | Touch | Desktop |
+| | Touch | Keyboard |
 |---|---|---|
-| Run | drag in the strip below the ground | A / D or arrow keys |
-| Aim | touch the sky (aim stays where you left it) | mouse |
-| Jump | tap anywhere on the bottom strip (other thumb while running) | Space, W or up arrow |
-| Place / re-aim tower | tower button | T or E |
+| Run | drag anywhere on the screen | A / D or arrow keys |
+| Jump | tap anywhere (other thumb while running) | Space, W or up arrow |
+| Place / turn tower | tower button | T or E |
 | Use a supply | round buttons bottom left | 1 (nuke), 2 (time slow), 3 (shield cell) |
 | Pause / mute | buttons top right | P or Esc / M |
+
+There is no aiming. The blaster fires straight up; towers are planted firing straight up and
+step through up, left and right each time you press the tower button while standing on one.
 
 The blaster and towers fire on their own whenever meteors are in the sky.
 
@@ -60,8 +62,8 @@ The blaster and towers fire on their own whenever meteors are in the sky.
   permanent perks. Shards and perks survive "New game" too.
 - **Boulders** appear from stage 3 (one more every two stages). They block the way; one jump
   clears any of them. Towers can't be planted on a boulder.
-- **Blaster auto-targeting** (from stage 6) aims the blaster for you. Touching the sky, or
-  holding the mouse button, takes manual control while held.
+- **Blaster auto-targeting** (from stage 6) makes the blaster swing to track threats
+  instead of only firing straight up.
 - Tower insurance replaces destroyed towers for free at the end of the stage, one per level.
 - With tower repair, damaged towers mend 1 health every few seconds (the timer restarts when hit).
 - **Bosses** arrive on every 10th stage, taking turns: the Mothership (fires spreads, drops

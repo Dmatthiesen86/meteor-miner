@@ -25,6 +25,9 @@ const TITAN_R = 95;
 const TWIN_SPREAD = 0.11;            // radians between Twin shot bullets
 const SLOW_SECONDS = 6, SLOW_FACTOR = 0.35;
 const NUKE_BOSS_SHARE = 0.2, NUKE_UFO_SHARE = 0.5;   // share of full health a nuke takes off
+const UP = -Math.PI / 2;
+// The directions a tower steps through each time it is turned: up, up-left, up-right.
+const TOWER_ANGLES = [UP, UP - 0.7, UP + 0.7];
 const AIM_MARGIN = 0.12;          // keeps guns from firing flat along the ground
 
 export const PLAYER_H = 36;
@@ -71,7 +74,7 @@ export function startStage() {
   G.gunT = 0;
   G.gunRocketT = 1;
   G.shake = 0;
-  G.aim = -Math.PI / 2;
+  G.aim = UP;
   input.deploy = false;
   input.jump = false;
   input.use = null;
@@ -102,7 +105,7 @@ export function updateCamera() {
   v.camX = v.w >= W ? -(v.w - W) / 2 : clamp(G.player.x - v.w / 2, 0, W - v.w);
 }
 
-/** The tower the player is standing at, if any (re-aim target). */
+/** The tower the player is standing at, if any (the one the tower button would turn). */
 export function towerInReach() {
   return G.towers.find(t => Math.abs(t.x - G.player.x) < TOWER_SPACING) || null;
 }
@@ -528,10 +531,11 @@ function deployTower() {
     sfx.deny();
     floater(near.x, TOWER_Y - 26, 'Auto-aiming', '#b9f1ff');
   } else if (near) {
-    near.angle = G.aim;
+    near.turn = (near.turn + 1) % TOWER_ANGLES.length;
+    near.angle = TOWER_ANGLES[near.turn];
     near.flash = 0.2;
     sfx.deploy();
-    floater(near.x, TOWER_Y - 26, 'Re-aimed', '#b9f1ff');
+    floater(near.x, TOWER_Y - 26, ['Up', 'Left', 'Right'][near.turn], '#b9f1ff');
   } else if (G.towersLeft > 0 && obstacleAt(G.player.x, 14)) {
     sfx.deny();
     floater(G.player.x, TOWER_Y - 26, 'No room here', '#ff6b5e');
@@ -539,7 +543,7 @@ function deployTower() {
     G.towersLeft--;
     const { hp, shield } = towerStats(G.profile.up);
     G.towers.push({
-      x: G.player.x, angle: G.aim, cd: 0.3, rocketCd: 1.5, hp, maxHp: hp, shield, maxShield: shield,
+      x: G.player.x, angle: UP, turn: 0, cd: 0.3, rocketCd: 1.5, hp, maxHp: hp, shield, maxShield: shield,
       recharge: 0, repairT: 0, flash: 0.2, dead: false,
     });
     sfx.deploy();
@@ -638,11 +642,10 @@ export function update(dt) {
   }
   updateCamera();
 
-  if (up.gunAuto && !input.aimHeld) {
-    const want = targetAngle(p.x, gunY);
-    if (want !== null) G.aim += clamp(want - G.aim, -GUN_TURN * dt, GUN_TURN * dt);
-  } else if (input.aimPoint) {
-    G.aim = clampAim(Math.atan2(input.aimPoint.y - gunY, input.aimPoint.x + G.view.camX - p.x));
+  // The blaster fires straight up. Auto-targeting is the only thing that swings it.
+  if (up.gunAuto) {
+    const want = targetAngle(p.x, gunY) ?? UP;
+    G.aim += clamp(want - G.aim, -GUN_TURN * dt, GUN_TURN * dt);
   }
   if (input.deploy) {
     input.deploy = false;

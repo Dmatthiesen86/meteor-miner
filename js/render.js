@@ -371,11 +371,11 @@ function drawControls(ctx, vw) {
     ctx.fillStyle = 'rgba(255, 255, 255, .55)';
     ctx.font = '600 15px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('◀  drag here to run  ▶', vw / 2, GROUND_Y + 58);
+    ctx.fillText('◀  drag anywhere to run  ▶', vw / 2, GROUND_Y + 58);
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, .35)';
-    ctx.fillText('or use A / D  ·  touch the sky to aim', vw / 2, GROUND_Y + 80);
-    ctx.fillText('tap down here (or Space) to jump', vw / 2, GROUND_Y + 100);
+    ctx.fillText('tap anywhere to jump', vw / 2, GROUND_Y + 80);
+    ctx.fillText('keyboard: A / D and Space', vw / 2, GROUND_Y + 100);
   }
 }
 

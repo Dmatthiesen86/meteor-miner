@@ -1,15 +1,15 @@
-// Touch + mouse + keyboard.
-//   Touch:    drag in the strip below the ground to run, tap it to jump, touch the sky to aim.
-//   Desktop:  A/D or arrow keys to run, Space / W / Up to jump, mouse to aim, T / E for towers, 1 / 2 / 3 for supplies.
+// Touch + mouse + keyboard. The whole screen is one control surface:
+//   Touch / mouse:  drag anywhere to run, tap anywhere to jump. While one thumb is steering,
+//                   a tap from the other thumb jumps at once.
+//   Keyboard:       A/D or arrow keys to run, Space / W / Up to jump, T / E for towers,
+//                   1 / 2 / 3 for supplies.
+// There is no aiming: the blaster fires straight up.
 import { G } from './state.js';
-import { GROUND_Y } from './config.js';
 
 export const input = {
   move: 0,          // -1 .. 1
-  aimPoint: null,   // where the player is pointing, in logical view units
   stick: null,      // { x0, x, y } while a movement drag is active (drawn by the renderer)
-  aimHeld: false,   // a finger or mouse button is down on the sky (overrides auto-targeting)
-  deploy: false,    // one-shot: place or re-aim a tower
+  deploy: false,    // one-shot: place or turn a tower
   jump: false,      // one-shot
   use: null,        // one-shot: id of a supply item to fire
 };
@@ -17,8 +17,10 @@ export const input = {
 const STICK_RANGE = 36, STICK_DEAD = 0.18;
 const TAP_MS = 220, TAP_SLOP = 12;   // a touch this short and this still is a tap, not a drag
 const keys = new Set();
-let movePtr = null, aimPtr = null;
-let fingersDown = 0;   // from touch events, which report every finger on the glass
+let movePtr = null;
+// Finger count from touch events, which report every finger on the glass. Not every browser
+// sends them, so the count is only trusted once one has been seen.
+let fingersDown = 0, touchEventsSeen = false;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -40,9 +42,7 @@ function keyMove() {
  */
 export function resetPointers() {
   movePtr = null;
-  aimPtr = null;
   input.stick = null;
-  input.aimHeld = false;
   input.move = keyMove();
 }
 
@@ -51,60 +51,41 @@ export function initInput(canvas, handlers) {
     e.preventDefault();
     handlers.unlock();
     // This is the only finger on the glass, so any finger still on the books is a ghost.
-    if (e.pointerType === 'touch' && fingersDown === 0) resetPointers();
+    if (e.pointerType === 'touch' && touchEventsSeen && fingersDown === 0) resetPointers();
+    // A second finger while the first is steering: jump at once.
+    if (movePtr !== null) { input.jump = true; return; }
     const p = logical(e);
-    if (p.y > GROUND_Y) {
-      // A second finger on the strip while the first is steering: jump at once.
-      if (movePtr !== null) { input.jump = true; return; }
-      movePtr = e.pointerId;
-      input.stick = { x0: p.x, x: p.x, y: p.y, startX: p.x, t: performance.now(), moved: false };
-    } else {
-      aimPtr = e.pointerId;
-      input.aimPoint = p;
-      input.aimHeld = true;
-    }
+    movePtr = e.pointerId;
+    input.stick = { x0: p.x, x: p.x, y: p.y, startX: p.x, t: performance.now(), moved: false };
     try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   });
 
   canvas.addEventListener('pointermove', e => {
-    const p = logical(e);
-    if (e.pointerId === movePtr) {
-      const s = input.stick;
-      s.x = p.x;
-      if (Math.abs(p.x - s.startX) > TAP_SLOP) s.moved = true;
-      // The anchor trails the finger so reversing direction never needs a long drag back.
-      s.x0 = clamp(s.x0, s.x - STICK_RANGE * 1.4, s.x + STICK_RANGE * 1.4);
-      const v = clamp((s.x - s.x0) / STICK_RANGE, -1, 1);
-      input.move = Math.abs(v) < STICK_DEAD ? 0 : v;
-    } else if (e.pointerId === aimPtr || (e.pointerType === 'mouse' && aimPtr === null)) {
-      input.aimPoint = p;
-    }
+    if (e.pointerId !== movePtr) return;
+    const p = logical(e), s = input.stick;
+    s.x = p.x;
+    if (Math.abs(p.x - s.startX) > TAP_SLOP) s.moved = true;
+    // The anchor trails the finger so reversing direction never needs a long drag back.
+    s.x0 = clamp(s.x0, s.x - STICK_RANGE * 1.4, s.x + STICK_RANGE * 1.4);
+    const v = clamp((s.x - s.x0) / STICK_RANGE, -1, 1);
+    input.move = Math.abs(v) < STICK_DEAD ? 0 : v;
   });
 
   const release = e => {
-    if (e.pointerId === movePtr) {
-      // A lone quick tap can only be told from a drag once the finger lifts.
-      const s = input.stick;
-      if (e.type === 'pointerup' && !s.moved && performance.now() - s.t < TAP_MS) input.jump = true;
-      movePtr = null;
-      input.stick = null;
-      input.move = keyMove();
-    } else if (e.pointerId === aimPtr) {
-      aimPtr = null;
-      input.aimHeld = false;
-      // A finger leaves the screen, so keep the last angle. A mouse is still hovering.
-      if (e.pointerType !== 'mouse') input.aimPoint = null;
-    }
+    if (e.pointerId !== movePtr) return;
+    // A lone quick tap can only be told from a drag once the finger lifts.
+    const s = input.stick;
+    if (e.type === 'pointerup' && !s.moved && performance.now() - s.t < TAP_MS) input.jump = true;
+    resetPointers();
   };
   // On window, not the canvas: the lift must count wherever it lands.
   window.addEventListener('pointerup', release);
   window.addEventListener('pointercancel', release);
-  canvas.addEventListener('lostpointercapture', e => {
-    if (e.pointerId === movePtr || e.pointerId === aimPtr) release(e);
-  });
+  canvas.addEventListener('lostpointercapture', release);
   // Touch events fire after the matching pointer event, so at pointerdown `fingersDown`
   // still holds the count from before that finger landed.
   const countFingers = e => {
+    touchEventsSeen = true;
     fingersDown = e.touches.length;
     if (fingersDown === 0) resetPointers();
   };

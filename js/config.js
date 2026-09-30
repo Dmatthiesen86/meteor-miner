@@ -180,14 +180,14 @@ export const SHOP = [
   { id: 'shield',     name: 'Shield',         desc: 'Absorbs 1 hit per level. Recharges every stage.', max: 5, cost: l => Math.round(100 * Math.pow(1.7, l)) },
 
   { group: 'Blaster' },
-  { id: 'gun',        name: 'Blaster',        desc: 'Auto-fires wherever you point.',                max: 1,  cost: () => 50 },
+  { id: 'gun',        name: 'Blaster',        desc: 'Fires straight up, non-stop.',                  max: 1,  cost: () => 50 },
   { id: 'damage',     name: 'Blaster damage', desc: '+1 damage per shot.',                           max: 10, cost: l => Math.round(60 * Math.pow(1.55, l)), needs: 'gun', endless: true },
   { id: 'rate',       name: 'Blaster fire rate', desc: 'Blaster shoots 20% faster.',                 max: 8,  cost: l => Math.round(70 * Math.pow(1.5, l)),  needs: 'gun' },
-  { id: 'gunAuto',    name: 'Blaster auto-targeting', desc: 'Blaster tracks the nearest threat by itself. Touch the sky to take over.', max: 1, cost: () => 800, needs: 'gun', minStage: 6 },
+  { id: 'gunAuto',    name: 'Blaster auto-targeting', desc: 'Blaster swings to track the nearest threat instead of only firing straight up.', max: 1, cost: () => 800, needs: 'gun', minStage: 6 },
   { id: 'gunRockets', name: 'Blaster rockets', desc: 'Blaster also fires an exploding rocket every 2.5s. Each level: bigger, harder-hitting blast.', max: 5, cost: l => Math.round(600 * Math.pow(1.6, l)), needs: 'gun', minStage: 6 },
 
   { group: 'Towers' },
-  { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Fires non-stop the way you aim it.', max: 6, cost: l => 120 + 80 * l },
+  { id: 'towers',     name: 'Tower',          desc: 'Deployable turret. Fires straight up; stand on it and tap the tower button to turn it.', max: 6, cost: l => 120 + 80 * l },
   { id: 'towerDamage', name: 'Tower damage',  desc: '+1 damage per shot for every tower.',           max: 10, cost: l => Math.round(80 * Math.pow(1.55, l)), needs: 'towers', endless: true },
   { id: 'towerRate',  name: 'Tower fire rate', desc: 'Every tower shoots 20% faster.',               max: 8,  cost: l => Math.round(90 * Math.pow(1.5, l)),  needs: 'towers' },
   { id: 'towerArmor', name: 'Tower armor',    desc: 'Every tower survives 1 more blast.',            max: 6,  cost: l => Math.round(70 * Math.pow(1.6, l)),  needs: 'towers', endless: true },
